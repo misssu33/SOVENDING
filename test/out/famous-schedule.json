@@ -1,0 +1,44 @@
+{
+  "app": "shorts-vending",
+  "kind": "famous-shorts-schedule",
+  "version": 2,
+  "generatedAt": "2026-11-25T02:22:06.032Z",
+  "timezone": "Asia/Seoul",
+  "perDay": 10,
+  "randomizeWithinSeconds": 1800,
+  "layout": "banded",
+  "useThumbnail": true,
+  "sources": [
+    "tiktok",
+    "youtube",
+    "instagram"
+  ],
+  "marks": {
+    "ai": true,
+    "topN": true,
+    "topCount": 7,
+    "position": "tl"
+  },
+  "title": "유명 쇼츠 TOP 5",
+  "caption": "링크는 고정댓글에 있어요",
+  "accounts": [
+    {
+      "name": "메인 계정",
+      "baseTime": "12:00",
+      "slots": [
+        "2026-11-25T11:58:09",
+        "2026-11-26T11:30:28",
+        "2026-11-27T12:29:25"
+      ]
+    },
+    {
+      "name": "서브 계정",
+      "baseTime": "19:30",
+      "slots": [
+        "2026-11-25T19:56:14",
+        "2026-11-26T19:01:25",
+        "2026-11-27T19:48:04"
+      ]
+    }
+  ]
+}

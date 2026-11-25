@@ -1,19 +1,23 @@
-127.0.0.1 - - [25/Nov/2026 08:57:13] "GET /index.html HTTP/1.1" 200 -
-127.0.0.1 - - [25/Nov/2026 08:57:18] "GET /index.html HTTP/1.1" 200 -
-127.0.0.1 - - [25/Nov/2026 08:57:32] "GET /index.html HTTP/1.1" 200 -
-127.0.0.1 - - [25/Nov/2026 08:58:09] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [25/Nov/2026 11:21:09] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [25/Nov/2026 11:21:15] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [25/Nov/2026 11:21:30] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [25/Nov/2026 11:22:33] "GET /index.html HTTP/1.1" 200 -
 
 === 0. 정적 산출물 ===
-  PASS  index.html 단일 파일 생성  [222,899B]
+  PASS  index.html 단일 파일 생성  [304,196B]
   PASS  외부 스크립트 태그 없음
   PASS  외부 리소스(src/href) 0건  [[]]
   PASS  CSS @import 없음
   PASS  CDN/웹폰트 참조 없음
-  PASS  0~7단계 패널 8개
-  PASS  단계 내비 8개
+  PASS  성과·1~6단계·도구 5개 패널 12개  [12]
+  PASS  메뉴·패널 view 12개 이상
+  PASS  사이드바 🔥 유명 쇼츠 메뉴
+  PASS  사이드바 도구 메뉴(멀티 다운로더·자막 지우개)
+  PASS  내 성과·쿠팡파트너스 메뉴
+  PASS  상단 로그인 0/6 배지
   PASS  업로드 허브 5개 플랫폼 카드
   PASS  모바일 viewport 메타
-  PASS  앱 코드 인라인 크기  [206,844자]
+  PASS  앱 코드 인라인 크기  [281,492자]
 
 === 1. 초기 로드 · 네트워크 · 콘솔 ===
   PASS  콘솔 오류 0건  [[]]
@@ -21,12 +25,16 @@
   PASS  로드 시 외부 요청 0건  [[]]
   PASS  페이지 제목  [쇼츠자판기 · 링크에서 쇼츠까지]
   PASS  데모 모드 배지
+  PASS  시작 화면 = 내 성과
+  PASS  상단 AI/키 배지
+  PASS  상단 로그인 0/6
+  PASS  내 성과 카드 8개
   PASS  키 0/5 배지
   PASS  미리보기 플레이스홀더 표시
   PASS  미리보기 캔버스 540×960  [[540, 960]]
-  PASS  단계 레일 8개
+  PASS  메뉴 12개(성과·1~6·도구 5)
   PASS  한 번에 한 단계만 표시
-  PASS  시작 단계 = 0
+  PASS  시작 화면은 단계 번호 없음
   PASS  데스크톱 가로 오버플로 없음  [[1440, 1440]]
   PASS  인라인 스크립트 1개  [1]
 
@@ -40,10 +48,15 @@
   PASS  localStorage에 키 5개 저장  [5]
   PASS  신규 키 상태 = 대기  [['대기', '대기', '대기', '대기', '대기']]
   PASS  키 마스킹 표시
-  PASS  데모 끄면 Gemini 연결 배지
+  PASS  데모 끄면 AI 연결됨 · 키 5/5 배지
   PASS  Esc로 모달 닫힘
+  PASS  ⚙ 설정 화면에 연결 테스트 버튼
   PASS  키 연결 테스트 성공(모의 200)
   PASS  테스트 호출 1회  [['KEY-1']]
+  PASS  로그인 계정 6개 체크박스
+  PASS  로그인 2/6 상태바 반영  [로그인 2/6]
+  PASS  로그인 계정 로컬 저장
+  PASS  로그인 체크 해제
   PASS  429 키 3개 건너뛰고 4번 키 사용  [['KEY-1', 'KEY-2', 'KEY-3', 'KEY-4']]
   PASS  키 상태 활성/한도초과/대기  [['exhausted', 'exhausted', 'exhausted', 'active', 'waiting']]
   PASS  활성 키 = 4번
@@ -106,6 +119,13 @@
   PASS  길게 = 7문장
   PASS  보통 = 5문장
   PASS  유머 톤 반영
+  PASS  후킹 멘트 후보 6개 생성  [6]
+  PASS  후킹 칩 6개 표시
+  PASS  현재 첫 문장 칩 표시
+  PASS  후킹 칩을 누르면 첫 문장 교체  [기름 없이 바삭하게. 이건 진짜였어요.]
+  PASS  문장 편집창도 같이 바뀜
+  PASS  후킹 교체 시 음성 무효화
+  PASS  1번 후킹으로 되돌리기
   PASS  상단 제목 2줄 생성  [['에어프라이어 5.5L 대용량 이거 실화?', '기름 없이 바삭하게 진짜였어']]
   PASS  제목 입력창 동기화
   PASS  강조 단어 3개 이상
@@ -125,25 +145,37 @@
   PASS  타임라인 길이 = 실제 오디오 길이(실측)
   PASS  총 길이 = 마지막 문장 끝
   PASS  타임라인 표 5행
-  PASS  총 길이 표시  [18.8s]
+  PASS  총 길이 표시  [18.5s]
   PASS  음성 모드 배지
-  PASS  실측 길이 안내  [브라우저 합성음 · 5문장 · 18.8초 (실측)]
+  PASS  실측 길이 안내  [브라우저 합성음 · Kore · 문장 사이 0.15초 · 5문장 · 18.5초 (실측)]
   PASS  오디오 샘플레이트  [44100]
-  PASS  속도를 올리면 길이가 줄어듦  [18.8→14.8]
-  PASS  미리보기 재생 진행  [0.92]
+  PASS  기본 문장 사이 간격 0.15초  [0.15]
+  PASS  타임라인에 0.15초 간격 반영
+  PASS  문장 사이 간격 4개 선택지
+  PASS  구글 목소리 5종 라벨
+  PASS  목소리 선택 5개
+  PASS  구글 목소리(Gemini Native TTS) 라벨
+  PASS  속도를 올리면 길이가 줄어듦  [18.5→14.5]
+  PASS  간격 0.5초 → 총 길이 4×0.35 늘어남  [18.46→19.86]
+  PASS  타임라인 간격 0.5초 반영  [[0.5, 0.5, 0.5, 0.5]]
+  PASS  간격 라벨 갱신  [0.5초]
+  PASS  간격 0초(바로 이어서) → 총 길이 감소  [18.46→17.86]
+  PASS  간격 0초면 문장이 바로 이어짐
+  PASS  간격 0.15초로 복귀
+  PASS  미리보기 재생 진행  [0.91]
   PASS  재생 중 버튼 상태
   PASS  일시정지
 
 === 5b. Gemini 실제 경로(모의) · 대본/TTS ===
   PASS  TTS용 키 1개 저장
-  PASS  TTS 테스트는 Gemini 모드
+  PASS  TTS 테스트는 AI 연결 모드
   PASS  Gemini 대본 경로 사용  [False]
   PASS  모의 Gemini 제목 2줄  [['모의 제목 하나', '모의 제목 둘']]
   PASS  모의 Gemini 문장 5개
   PASS  제목 입력창에 Gemini 결과
   PASS  Gemini TTS 모드  [gemini]
   PASS  PCM 24kHz 0.6초 → 타임라인 실측  [[0.6, 0.6, 0.6, 0.6, 0.6]]
-  PASS  Gemini TTS 총 길이  [3.64]
+  PASS  Gemini TTS 총 길이(간격 0.15초)  [3.6]
   PASS  TTS 모드 배지  [Gemini TTS]
   PASS  TTS 요청에 AUDIO 응답 모달리티
   PASS  TTS 보이스 지정
@@ -165,7 +197,7 @@
   PASS  가리기 방식 라벨
   PASS  가리기 강도 조절 반영
   PASS  상단 제목 켜기/끄기 반영
-  PASS  자막 크기·위치·글꼴·색상 각각 반영  [[3034720689, 1215318669, 846898497, 3397942220, 2655007457]]
+  PASS  자막 크기·위치·글꼴·색상 각각 반영  [[4138198325, 202240529, 2575507769, 1302614185, 4157220869]]
   PASS  자막 수치 라벨
   PASS  BGM 선택 반영
   PASS  BGM 배지 갱신
@@ -184,21 +216,21 @@
 === 7. 9:16 미리보기 · WebM 내보내기 ===
   PASS  미리보기 해상도 표시
   PASS  미리보기 9:16 비율  [0.5625]
-  PASS  탐색바 50% 이동  [9.39/18.79]
+  PASS  탐색바 50% 이동  [9.23/18.46]
   PASS  내보내기용 2문장
-  PASS  WebM 생성  [{'size': 3623983, 'type': 'video/webm'}]
+  PASS  WebM 생성  [{'size': 3558883, 'type': 'video/webm'}]
   PASS  MIME video/webm  [video/webm]
-  PASS  실시간 녹화 시간  [9.2s / 9.1s]
+  PASS  실시간 녹화 시간  [9.1s / 9.0s]
   PASS  내보내기 진행바 종료
-  PASS  내보내기 완료 표시  [완료 · 3.46MB · 9.1초]
+  PASS  내보내기 완료 표시  [완료 · 3.39MB · 9.0초]
   PASS  WebM 해상도 540×960  [(540, 960)]
-  PASS  WebM 길이 = 음성 길이  [9.08 vs 9.15]
-  PASS  내보낸 WebM 오디오 디코드  [{'dur': 9.059977324263038, 'rms': 0.12343494844051232, 'sr': 44100}]
-  PASS  내보낸 오디오에 소리 포함  [0.12343494844051232]
+  PASS  WebM 길이 = 음성 길이  [8.97 vs 8.99]
+  PASS  내보낸 WebM 오디오 디코드  [{'dur': 8.999977324263039, 'rms': 0.11263459187718199, 'sr': 44100}]
+  PASS  내보낸 오디오에 소리 포함  [0.11263459187718199]
   PASS  내보낸 영상 프레임이 비어 있지 않음  [{'mn': 0, 'mx': 255}]
-  PASS  다운로드 링크 = 생성된 파일  [3623983]
-  PASS  WebM 파일 다운로드  [3,623,983B]
-  PASS  파일명 .webm  [shorts-vending-2026-11-24.webm]
+  PASS  다운로드 링크 = 생성된 파일  [3558883]
+  PASS  WebM 파일 다운로드  [3,558,883B]
+  PASS  파일명 .webm  [shorts-vending-2026-11-25.webm]
   PASS  내보내면 링크 히스토리 자동 추가
 
 === 8. 5단계 · 제목 10개·썸네일 PNG ===
@@ -219,18 +251,18 @@
   PASS  PNG 시그니처  [[137, 80, 78, 71, 13, 10, 26, 10]]
   PASS  PNG 용량  [2,198,876B]
   PASS  내려받은 PNG 크기  [(1080, 1920)]
-  PASS  썸네일 파일명 .png  [shorts-thumbnail-2026-11-24.png]
+  PASS  썸네일 파일명 .png  [shorts-thumbnail-2026-11-25.png]
   PASS  내려받은 PNG 용량  [2198876]
   PASS  설명 클립보드 복사  [143]
 
 === 9. 6단계 · 다뿌려 업로드 허브 ===
-  PASS  5개 플랫폼 문구 생성  [{'yt': 309, 'tt': 132, 'ig': 300, 'th': 155, 'fb': 298}]
+  PASS  5개 플랫폼 문구 생성  [{'yt': 334, 'tt': 156, 'ig': 324, 'th': 179, 'fb': 322}]
   PASS  유튜브 #Shorts 태그
   PASS  틱톡에는 #Shorts 없음
   PASS  유튜브 문구에 대가성 문구
   PASS  업로드 문구에 쿠팡 링크
   PASS  인스타 해시태그 5개 이상
-  PASS  글자수 카운터  [310 / 5,000 vs 310]
+  PASS  글자수 카운터  [335 / 5,000 vs 335]
   PASS  허브 상태 문구
   PASS  플랫폼 문구 복사
   PASS  전체 문구 복사
@@ -251,7 +283,7 @@
   PASS  자동 링크에 상품명 반영  [https://link.coupang.com/a/에어프라이어-5-5l-대용량-ha3e]
   PASS  링크 히스토리 행 추가  [2]
   PASS  히스토리 카운터
-  PASS  히스토리 제품명·링크  [{'id': 'iulpo', 'name': '에어프라이어 5.5L 대용량', 'link': 'https://link.coupang.com/a/에어프라이어-5-5l-대용량-ha3e', 'date': '2026-11-24T23:57:59.532Z', 'auto': False}]
+  PASS  히스토리 제품명·링크  [{'id': 'iuqki', 'name': '에어프라이어 5.5L 대용량', 'link': 'https://link.coupang.com/a/에어프라이어-5-5l-대용량-ha3e', 'date': '2026-11-25T02:21:57.186Z', 'auto': False}]
   PASS  히스토리 링크 복사
   PASS  히스토리 삭제
   PASS  대가성 문구 문구
@@ -262,12 +294,82 @@
   PASS  자동 생성 켜면 링크 생성
   PASS  접두어 변경 반영
 
+=== 10b. 도구 · 🔥 유명 쇼츠 자동생성 및 업로드 ===
+  PASS  영상 찾을 곳 3곳(TikTok·YouTube·Instagram)
+  PASS  기본 3곳 모두 선택
+  PASS  화면 구성 = 꽉 찬/위아래 검은 화면
+  PASS  기본 화면 구성 = 꽉 찬 화면
+  PASS  유명 쇼츠 미리보기 540×960
+  PASS  위아래 검은 화면으로 바뀌면 미리보기 변화
+  PASS  화면 구성 배지 갱신  [위아래 검은 화면]
+  PASS  하단 내 문구가 미리보기에 반영
+  PASS  상단 제목 반영
+  PASS  썸네일 안 쓰기 체크
+  PASS  설정 JSON에 썸네일 미사용 반영
+  PASS  표기 위치 오른쪽 위 반영
+  PASS  표기 위치 왼쪽 아래 반영
+  PASS  AI 표기 끄면 미리보기 변화
+  PASS  TOP N 끄면 미리보기 변화
+  PASS  TOP N 숫자 변경
+  PASS  TOP N 카운트다운이 시간에 따라 바뀜
+  PASS  영상 찾을 곳 1곳만 남김  [['tiktok']]
+  PASS  마지막 1곳은 해제되지 않음
+  PASS  3곳 다시 선택
+  PASS  소재 후보 표시
+  PASS  소재 고르기
+  PASS  하루 최대 개수 + 버튼
+  PASS  하루 최대 개수 - 버튼
+  PASS  하루 개수 라벨
+  PASS  시간대 선택(Asia/Yakutsk)
+  PASS  계정 추가
+  PASS  스케줄 표 행 = 계정 수
+  PASS  계정 삭제
+  PASS  계정별 다음 올릴 시각 계산  [[{'day': datetime.datetime(2026, 11, 25, 2, 22, 5, 980000, tzinfo=datetime.timezone.utc), 'sec': 43089, 'hh': 11, 'mm': 58, 'ss': 9}, {'day': datetime.datetime(2026, 11, 25, 2, 22, 5, 980000, tzinfo=datetime.timezone.utc), 'sec': 71774, 'hh': 19, 'mm': 56, 'ss': 14}]]
+  PASS  랜덤 오차 ±30분 이내  [1.9]
+  PASS  스케줄은 새로 계산해도 동일(고정 시드)
+  PASS  설정 JSON 시간대·하루 개수  [('Asia/Seoul', 10)]
+  PASS  설정 JSON 랜덤 ±1800초
+  PASS  설정 JSON 계정 3일치 슬롯
+  PASS  설정 JSON TOP N 표기  [{'ai': True, 'topN': True, 'topCount': 7, 'position': 'tl'}]
+  PASS  설정 JSON 내려받기  [sovending-famous-schedule-2026-11-25.json]
+  PASS  JSON 파일명 .json  [sovending-famous-schedule-2026-11-25.json]
+  PASS  유명 쇼츠 WebM 생성  [{'size': 1910818}]
+  PASS  유명 쇼츠 실시간 녹화  [9.0s / 9.0s]
+  PASS  유명 쇼츠 WebM 540×960  [{'w': 540, 'h': 960}]
+  PASS  유명 쇼츠 내보내기 완료 표시  [완료 · 1.82MB · 9.0초]
+
+=== 10c. 도구 · 자막 지우개 ===
+  PASS  업로드한 영상 2개 선택 가능  [['ilwo6', 'imwoo']]
+  PASS  자막 지우개 캔버스 540×960  [[540, 960]]
+  PASS  가릴 세로 위치 변경 반영
+  PASS  가릴 너비 변경 반영
+  PASS  블러 ↔ 모자이크 전환
+  PASS  가리기 강도 변경 반영
+  PASS  강도 라벨
+  PASS  영역 기본값 복원
+  PASS  자막 지우개 WebM 생성  [{'size': 690071}]
+  PASS  자막 지우개 녹화 시간  [3.0s]
+  PASS  자막 지우개 WebM 540×960  [{'w': 540, 'h': 960}]
+  PASS  자막 지우개 완료 표시  [완료 · 0.66MB · 3.0초 · 영상만(음성 없음)]
+
+=== 10d. 도구 · 멀티 다운로더 ===
+  PASS  중복·빈 줄·링크 아닌 줄 정리  [3]
+  PASS  링크 개수 표시
+  PASS  링크 목록 3개
+  PASS  yt-dlp 명령에 링크 포함
+  PASS  명령에 links.txt 안내
+  PASS  URL 목록 복사
+  PASS  명령 복사
+  PASS  목록에서 링크 빼기
+  PASS  links.txt 내려받기  [links.txt]
+  PASS  멀티 링크 목록 저장
+
 === 11. 레이아웃 · 데스크톱/모바일 ===
   PASS  데스크톱 3열 레이아웃  [3]
-  PASS  데스크톱 미리보기 오른쪽 배치  [{'mainRight': 1026, 'pvLeft': 1046, 'pvTop': 75}]
+  PASS  데스크톱 미리보기 오른쪽 배치  [{'mainRight': 1026, 'pvLeft': 1046, 'pvTop': 62}]
   PASS  중간 폭에서는 1열로 전환  [1]
   PASS  1024 가로 오버플로 없음  [[1024, 1024]]
-  PASS  모바일 390 모든 단계 가로 오버플로 없음  [[]]
+  PASS  모바일 390 모든 화면(12개) 가로 오버플로 없음  [[]]
   PASS  모바일 하단 내비 표시
   PASS  모바일 터치 타깃 ≥30px  [[('#btnAnalyze', 41), ('#btnWriteScript', 41), ('#btnExportMini', 31), ('#btnSuggestTitles', 31), ('#btnSettings', 31)]]
   PASS  모바일 단계 레일 가로 스크롤
@@ -282,6 +384,8 @@
   PASS  쿠팡 키 유지
   PASS  링크 히스토리 유지
   PASS  쿠팡 키 입력창 복원
+  PASS  유명 쇼츠 설정 유지  [Asia/Seoul]
+  PASS  멀티 다운로더 목록 유지
   PASS  데모 모드 설정 유지
   PASS  전체 플로우 콘솔 오류 0건(모의 429 제외)  [[]]
   PASS  429는 자동 전환 테스트에서만 발생  [5]
@@ -290,5 +394,5 @@
   PASS  외부 요청은 Gemini API뿐  [8]
 
 ======================================================
-테스트 결과: 256/256 통과, 실패 0건
+테스트 결과: 354/354 통과, 실패 0건
 ======================================================

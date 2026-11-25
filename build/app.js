@@ -42,7 +42,8 @@
 
   const LS = {
     keys: 'sv.keys.v1', preset: 'sv.preset.v1', coupang: 'sv.coupang.v1',
-    hist: 'sv.hist.v1', mode: 'sv.mode.v1', work: 'sv.work.v1'
+    hist: 'sv.hist.v1', mode: 'sv.mode.v1', work: 'sv.work.v1',
+    accounts: 'sv.accounts.v1', famous: 'sv.famous.v1', multi: 'sv.multi.v1'
   };
   function lsGet(key, fb) {
     try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fb; } catch (e) { return fb; }
@@ -59,7 +60,8 @@
 
   /* ---------------- state ---------------- */
   const state = {
-    step: 0,
+    view: 'perf',
+    step: -1,
     demo: true,
     keys: [],          // {id, value, status:'empty'|'waiting'|'active'|'exhausted', used, note}
     activeKey: null,
@@ -71,7 +73,22 @@
     refs: [],
     script: null,
     voice: null,
+    voiceGap: 0.15,
     scenes: [],
+    accounts: { yt: false, tiktok: false, instagram: false, threads: false, facebook: false, coupang: false },
+    famous: {
+      layout: 'full', noThumb: false, sources: ['tiktok', 'youtube', 'instagram'],
+      aiMark: true, topN: true, topPos: 'tl', topCount: 5,
+      tz: 'Asia/Seoul', perDay: 10, random: true,
+      title: '', caption: '', pick: null,
+      accounts: [
+        { id: 'fa1', name: '메인 계정', time: '12:00' },
+        { id: 'fa2', name: '서브 계정', time: '19:30' }
+      ]
+    },
+    multi: { links: [] },
+    eraser: { fileId: '', t: 0, x: 18, y: 58, w: 64, h: 18, mode: 'blur', strength: 18 },
+    activity: [],
     style: {
       blurOn: true, blurMode: 'blur', blurY: 55, blurH: 18, blurStrength: 18,
       titleOn: true, highlightOn: true,
@@ -152,7 +169,12 @@
     const counts = realKeys().length;
     const live = !state.demo && counts > 0;
     const mb = $('#modeBadge');
-    if (mb) { mb.className = 'badge ' + (live ? 'live' : 'demo'); mb.innerHTML = '<span class="dot"></span>' + (live ? 'Gemini 연결' : '데모 모드'); }
+    if (mb) {
+      mb.className = 'badge ' + (live ? 'live' : 'demo');
+      mb.innerHTML = '<span class="dot"></span>' + (live ? 'AI 연결됨' : '데모 모드') + ' · 키 ' + counts + '/5';
+    }
+    const lb = $('#loginBadge');
+    if (lb) { const n = loginCount(); lb.className = 'badge ' + (n ? 'blue' : ''); lb.innerHTML = '<span class="dot"></span>로그인 ' + n + '/6'; }
     $$('.js-demo-toggle').forEach(el => { if (el.checked !== !!state.demo) el.checked = !!state.demo; });
     const sm = $('#statusMode');
     if (sm) sm.innerHTML = '<i></i><b>' + (live ? 'Gemini 연결' : '데모 모드') + '</b> · ' + (live ? 'API 키 ' + counts + '개' : '모든 기능 로컬 실행');
@@ -162,9 +184,31 @@
     const pdb = $('#prodDemoBadge'); if (pdb) pdb.textContent = (state.product && state.product.demo) ? '데모 분석' : 'AI 분석';
   }
 
+  /* ---------------- 로그인 계정 (표시용) ---------------- */
+  const ACCOUNTS = [
+    { id: 'yt', name: 'YouTube', ico: '▶️' },
+    { id: 'tiktok', name: 'TikTok', ico: '🎵' },
+    { id: 'instagram', name: 'Instagram', ico: '📸' },
+    { id: 'threads', name: 'Threads', ico: '🧵' },
+    { id: 'facebook', name: 'Facebook', ico: '📘' },
+    { id: 'coupang', name: '쿠팡 파트너스', ico: '🏷️' }
+  ];
+  function loginCount() { return ACCOUNTS.filter(a => state.accounts[a.id]).length; }
+  function loadAccounts() {
+    const saved = lsGet(LS.accounts, null);
+    if (saved && typeof saved === 'object') ACCOUNTS.forEach(a => { if (saved[a.id] != null) state.accounts[a.id] = !!saved[a.id]; });
+  }
+  function saveAccounts() { lsSet(LS.accounts, state.accounts); updateModeUI(); }
+  function renderAccounts() {
+    const wrap = $('#acctList'); if (!wrap) return;
+    wrap.innerHTML = ACCOUNTS.map(a =>
+      '<label class="acct ' + (state.accounts[a.id] ? 'on' : '') + '"><input type="checkbox" data-acct="' + a.id + '" ' + (state.accounts[a.id] ? 'checked' : '') + ' aria-label="' + esc(a.name) + ' 로그인"><span>' + a.ico + ' ' + esc(a.name) + '</span></label>').join('');
+    const b = $('#acctBadge'); if (b) b.textContent = loginCount() + '/6';
+    updateModeUI();
+  }
+
   function openSettings() {
-    const m = $('#settingsModal'); if (!m) return;
-    m.hidden = false;
+    const m = $('#settingsModal'); if (!m) return;    m.hidden = false;
     renderKeys();
     setTimeout(() => { const first = $('#keyRows input'); if (first) first.focus(); }, 40);
   }
@@ -679,6 +723,7 @@
       badge.className = 'badge live'; badge.textContent = out.__fallback ? '데모 대체' : (state.product.demo ? '데모 완료' : '분석 완료');
       status.textContent = out.__fallback ? ('Gemini 실패 → 데모 결과 (' + out.__fallback + ')') : ((state.product.demo ? '데모' : 'Gemini') + ' 분석 완료 · 제품 1개 · 레퍼런스 ' + state.refs.length + '개');
       toast('분석 완료 · ' + state.product.name, 'good');
+      logActivity('🧠', '제품 분석 완료 · ' + state.product.name + (state.product.demo ? ' (데모)' : ' (AI)'));
       goStep(2);
     } catch (e) {
       badge.className = 'badge danger'; badge.textContent = '실패';
@@ -861,6 +906,45 @@
   function shortName(n) { return String(n || '').replace(/\s*\d+(\.\d+)?\s*(ml|L|l|g|kg|W)?$/i, '').slice(0, 16); }
   function hookShort(h) { return String(h || '').replace(/[.!?]$/, '').split(',')[0].slice(0, 16); }
 
+  /** 후킹 멘트 후보 6개 (첫 문장 자리에 그대로 쓰는 문장) */
+  function demoHooks(p, lang, name, h, k) {
+    const price = (p && p.price) || '합리적인 가격';
+    const h0 = h[0] || '첫인상', h1 = h[1] || '사용감';
+    const k0 = k[0] || '이 제품';
+    if (lang === 'en') return [
+      'This ' + name + ' is everywhere on social right now, so I finally tried it.',
+      'Three days in, ' + h1 + ' — and it is real.',
+      'Before you buy ' + name + ', watch these 15 seconds.',
+      h0 + '. That was the first thing I noticed.',
+      'This price for this quality is a steal.',
+      'If you were looking for ' + k0 + ', stop scrolling.'
+    ];
+    if (lang === 'ja') return [
+      'SNSで話題の' + name + '、ついに試してみました。',
+      '3日使ってみたら、' + h1 + 'は本当でした。',
+      name + ' を買う前に、15秒だけ見てください。',
+      h0 + '。第一印象はこれでした。',
+      'この価格でこの品質は買いです。',
+      k0 + ' を探していたなら、スクロールを止めて。'
+    ];
+    if (lang === 'zh') return [
+      '最近社交平台上超火的' + name + '，我终于试了。',
+      '用了三天，' + h1 + '是真的。',
+      '买' + name + '之前，先看这15秒。',
+      h0 + '，这是第一印象。',
+      '这个价格配这个品质，真的很划算。',
+      '如果你在找' + k0 + '，先别划走。'
+    ];
+    return [
+      '요즘 SNS에서 난리난 ' + name + ', 저도 드디어 써봤어요.',
+      '3일만 써보세요. ' + h1 + '이 달라집니다.',
+      name + ' 사기 전에 딱 15초만 보세요.',
+      h0 + '. 이건 진짜였어요.',
+      '이 가격(' + price + ')에 이 품질? 안 살 이유가 없죠.',
+      k0 + ' 찾고 있었다면, 잠깐만 보세요.'
+    ];
+  }
+
   function demoScript(product, lang, tone, length) {
     const p = product || { name: '제품', hooks: ['첫인상', '사용감', '가격'], keywords: ['추천', '후기'], price: '합리적인 가격' };
     const h = p.hooks && p.hooks.length ? p.hooks : ['첫인상', '사용감', '가격'];
@@ -922,7 +1006,9 @@
     if (tone === 'fun' && lang === 'ko') sents[0] = '요즘 SNS에서 난리난 ' + name + ', 저도 홀린 듯이 사버렸어요 ㅋㅋ';
     if (tone === 'pro' && lang === 'ko') sents[0] = 'SNS에서 화제인 ' + name + ', 3일간 직접 사용해 검증했습니다.';
     titles = titles.map(t => String(t).slice(0, lang === 'ko' ? 22 : 40));
-    return { lang, tone, length, titles, highlights: highlights.filter(Boolean), sentences: sents.map(text => ({ text })), demo: true };
+    const hooks = demoHooks(p, lang, name, h, k).slice(0, 6);
+    hooks[0] = sents[0];
+    return { lang, tone, length, titles, highlights: highlights.filter(Boolean), hooks, sentences: sents.map(text => ({ text })), demo: true };
   }
 
   async function geminiScript() {
@@ -938,15 +1024,24 @@
       '언어: ' + langName + ' / 톤: ' + TONE_NAME[opts.tone] + ' / 길이: ' + n + '문장',
       '규칙: 첫 문장은 1초 훅. 광고 같지 않게, 실제 사용 후기처럼. 각 문장은 20~45자(한국어 기준).',
       '상단 제목은 정확히 2줄(각 22자 이내, 한국어면 18자 이내), 강조 단어 3~5개.',
-      'JSON: {"titles":[string,string],"highlights":[string],"sentences":[string]} — 문장은 정확히 ' + n + '개.'
+      '후킹 후보(hooks)는 첫 문장 자리에 그대로 쓸 수 있는 1초 훅 문장 6개이고 서로 다른 각도로 써라.',
+      'JSON: {"titles":[string,string],"highlights":[string],"hooks":[string x6],"sentences":[string]} — 문장은 정확히 ' + n + '개.'
     ].join('\n');
     const raw = await geminiJSON(prompt, { temp: 0.9, maxTokens: 1400 });
     const titles = (Array.isArray(raw.titles) ? raw.titles : []).slice(0, 2).map(t => String(t).slice(0, 40));
     while (titles.length < 2) titles.push(titles[0] || '쇼츠 대본');
     const sents = (Array.isArray(raw.sentences) ? raw.sentences : []).map(s => ({ text: String(s).slice(0, 200) })).filter(s => s.text.trim());
     if (!sents.length) throw new Error('대본 문장이 비어 있습니다');
+    let hooks = (Array.isArray(raw.hooks) ? raw.hooks : []).map(s => String(s).trim()).filter(Boolean).slice(0, 6);
+    if (hooks.length < 6) {
+      const p2 = state.product || {};
+      const fill = demoHooks(p2, opts.lang, shortName(p2.name || '제품'), p2.hooks || [], p2.keywords || []);
+      for (let i = 0; hooks.length < 6 && i < fill.length; i++) { if (!hooks.includes(fill[i])) hooks.push(fill[i]); }
+    }
+    hooks = hooks.slice(0, 6);
+    hooks[0] = sents[0].text;
     return {
-      ...opts, titles,
+      ...opts, titles, hooks,
       highlights: (Array.isArray(raw.highlights) ? raw.highlights : []).slice(0, 6).map(String),
       sentences: sents.slice(0, 9), demo: false
     };
@@ -964,6 +1059,7 @@
       renderScript(); renderTimeline(); buildScenes(); ensurePreview();
       status.textContent = (out.demo ? '데모' : 'Gemini') + ' 대본 완료 · ' + out.sentences.length + '문장' + (out.__fallback ? ' (Gemini 실패 → 데모)' : '');
       toast('대본 ' + out.sentences.length + '문장을 만들었습니다', 'good');
+      logActivity('✍️', '대본 ' + out.sentences.length + '문장 · 후킹 후보 ' + ((out.hooks || []).length) + '개' + (out.demo ? ' (데모)' : ' (AI)'));
     } catch (e) {
       status.textContent = errMsg(e); toast('대본 실패: ' + errMsg(e), 'bad');
     } finally {
@@ -991,7 +1087,33 @@
       '<button class="btn xs danger" type="button" data-sent-del="' + i + '" title="삭제">✕</button></div></div>').join('');
     if (empty) empty.classList.toggle('hidden', s.sentences.length > 0);
     const cnt = $('#sentCount'); if (cnt) cnt.textContent = s.sentences.length + '문장';
+    renderHooks();
     updateModeUI();
+  }
+
+  /* 후킹 멘트 후보 6개 — 누르면 첫 문장이 그 문장으로 바로 바뀐다 */
+  function renderHooks() {
+    const wrap = $('#hookChips'); if (!wrap) return;
+    const s = state.script;
+    const hooks = (s && s.hooks) || [];
+    const first = s && s.sentences[0] ? String(s.sentences[0].text || '').trim() : '';
+    const cnt = $('#hookCount'); if (cnt) cnt.textContent = String(hooks.length);
+    const empty = $('#hookEmpty'); if (empty) empty.classList.toggle('hidden', hooks.length > 0);
+    wrap.innerHTML = hooks.map((h, i) =>
+      '<button class="hook-chip ' + (String(h).trim() === first ? 'on' : '') + '" type="button" data-hook="' + i + '" title="이 문장을 첫 문장으로 쓰기">' +
+      '<span class="n">' + pad(i + 1) + '</span><span>' + esc(h) + '</span></button>').join('');
+    const st = $('#hookStatus');
+    if (st) st.textContent = hooks.length ? '지금 첫 문장: ' + (first || '(비어 있음)') : '대본을 만들면 후킹 후보 6개가 여기에 나옵니다.';
+  }
+  function applyHook(i) {
+    const s = state.script;
+    if (!s || !s.hooks || !s.hooks[i]) return;
+    const text = String(s.hooks[i]);
+    if (!s.sentences.length) s.sentences.push({ text }); else s.sentences[0].text = text;
+    state.voice = null;
+    renderScript(); renderTimeline(); ensurePreview(); buildScenes();
+    drawPreview(); drawFamousPreview();
+    toast('첫 문장을 ' + (i + 1) + '번 후킹으로 바꿨습니다', 'good');
   }
 
   function updateTitleLens() {
@@ -1047,12 +1169,22 @@
     if (AC.state === 'suspended') AC.resume().catch(() => {});
     return AC;
   }
+  // 구글 목소리 — Gemini Native TTS 5종 (이름은 실제 TTS voiceName과 같다)
   const VOICES = {
-    calm_f: { pitch: 196, rate: 0.96, name: '차분한 여성' },
-    bright_f: { pitch: 232, rate: 1.04, name: '밝은 여성' },
-    deep_m: { pitch: 112, rate: 0.94, name: '낮은 남성' },
-    energy_m: { pitch: 148, rate: 1.1, name: '에너지 남성' }
+    kore: { pitch: 210, rate: 0.98, name: 'Kore', desc: '여성 · 따뜻하고 다정한' },
+    aoede: { pitch: 236, rate: 1.06, name: 'Aoede', desc: '여성 · 밝고 가벼운' },
+    charon: { pitch: 104, rate: 0.92, name: 'Charon', desc: '남성 · 낮고 차분한' },
+    puck: { pitch: 142, rate: 1.10, name: 'Puck', desc: '남성 · 힘 있고 에너지 있는' },
+    fenrir: { pitch: 118, rate: 0.96, name: 'Fenrir', desc: '남성 · 중저음 서사' }
   };
+  const VOICE_ORDER = ['kore', 'aoede', 'charon', 'puck', 'fenrir'];
+  function voiceInfo(key) { return VOICES[key] || VOICES.kore; }
+  function currentVoiceKey() { const el = $('#voiceSel'); return el && VOICES[el.value] ? el.value : 'kore'; }
+  function renderVoiceNames() {
+    const wrap = $('#voiceNames'); if (!wrap) return;
+    const cur = currentVoiceKey();
+    wrap.innerHTML = VOICE_ORDER.map(k => '<span class="voice-name ' + (k === cur ? 'on' : '') + '" title="' + esc(VOICES[k].desc) + '">' + VOICES[k].name + '</span>').join('');
+  }
   const KO_VOWELS = ['a', 'e', 'a', 'e', 'eo', 'e', 'eo', 'e', 'o', 'a', 'e', 'e', 'o', 'u', 'eo', 'e', 'i', 'u', 'eu', 'i', 'i'];
   const FORMANTS = {
     a: [820, 1250], e: [560, 1850], i: [330, 2350], o: [540, 900], u: [350, 820],
@@ -1088,7 +1220,7 @@
   function synthSpeechBuffer(text, opt) {
     const ac = getAC();
     const sr = ac.sampleRate;
-    const vp = VOICES[opt.voice] || VOICES.calm_f;
+    const vp = voiceInfo(opt.voice);
     const rate = clamp(opt.speed || 1, 0.6, 2);
     const pitch = vp.pitch * (0.98 + (rate - 1) * 0.12);
     const tokens = splitSyllables(text);
@@ -1161,7 +1293,7 @@
   }
 
   async function geminiTTS(text, voiceKey) {
-    const voiceName = { calm_f: 'Kore', bright_f: 'Aoede', deep_m: 'Charon', energy_m: 'Puck' }[voiceKey] || 'Kore';
+    const voiceName = voiceInfo(voiceKey).name;
     const data = await geminiCall('gemini-2.5-flash-preview-tts', {
       contents: [{ parts: [{ text: '다음 문장을 자연스러운 쇼츠 내레이션으로 읽어 주세요: ' + text }] }],
       generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } }
@@ -1173,13 +1305,41 @@
     return pcmToBuffer(inline.data, rate);
   }
 
+  function voiceGap() {
+    const el = $('#gapSel');
+    const v = el ? Number(el.value) : state.voiceGap;
+    return isFinite(v) ? clamp(v, 0, 2) : 0.15;
+  }
+  function gapLabel(g) { return g === 0 ? '0초 (바로 이어서)' : (Math.round(g * 100) / 100) + '초'; }
+  /** 문장 사이 간격만 바꾸면 오디오는 그대로 두고 타임라인 시작점만 다시 계산한다. */
+  function applyGap() {
+    state.voiceGap = voiceGap();
+    const lab = $('#gapVal'); if (lab) lab.textContent = gapLabel(state.voiceGap);
+    if (state.voice) {
+      let t = 0;
+      state.voice.timeline = state.voice.buffers.map((b, i) => {
+        const row = { i, start: t, dur: b.duration, end: t + b.duration };
+        t += b.duration + state.voiceGap;
+        return row;
+      });
+      state.voice.total = state.voice.timeline.length ? state.voice.timeline[state.voice.timeline.length - 1].end : 0;
+      state.voice.gap = state.voiceGap;
+      renderTimeline(); updatePreviewMeta();
+    }
+    const vs = $('#voiceStatus');
+    if (vs && state.voice) vs.textContent = '문장 사이 ' + gapLabel(state.voiceGap) + ' · ' + state.voice.timeline.length + '문장 · ' + state.voice.total.toFixed(1) + '초';
+    drawPreview(); drawFamousPreview();
+  }
+
   async function buildVoice() {
     if (!state.script || !state.script.sentences.length) { toast('먼저 대본을 만들어 주세요', 'bad'); return; }
     const btn = $('#btnMakeVoice'), status = $('#voiceStatus');
     btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 음성 만드는 중';
     const useGemini = !state.demo && realKeys().length > 0;
-    const voice = $('#voiceSel').value;
+    const voice = currentVoiceKey();
     const speed = Number($('#speedRange').value) || 1;
+    const gap = voiceGap();
+    state.voiceGap = gap;
     const timeline = [];
     const buffers = [];
     let mode = useGemini ? 'gemini' : 'demo';
@@ -1199,14 +1359,15 @@
         buffers.push(buf);
         const dur = buf.duration;
         timeline.push({ i, start: t, dur, end: t + dur });
-        t += dur + 0.16;
+        t += dur + gap;
       }
       const totalEnd = timeline.length ? timeline[timeline.length - 1].end : 0;
-      state.voice = { mode, voice, speed, timeline, total: totalEnd, buffers };
+      state.voice = { mode, voice, speed, gap, timeline, total: totalEnd, buffers };
       renderTimeline();
       ensurePreview();
-      status.textContent = (mode === 'gemini' ? 'Gemini TTS' : mode === 'mixed' ? '일부 Gemini · 나머지 합성음' : '브라우저 합성음') + ' · ' + timeline.length + '문장 · ' + totalEnd.toFixed(1) + '초 (실측)';
+      status.textContent = (mode === 'gemini' ? 'Gemini TTS · ' + voiceInfo(voice).name : mode === 'mixed' ? '일부 Gemini · 나머지 합성음' : '브라우저 합성음 · ' + voiceInfo(voice).name) + ' · 문장 사이 ' + gapLabel(gap) + ' · ' + timeline.length + '문장 · ' + totalEnd.toFixed(1) + '초 (실측)';
       toast('음성 타임라인 완성 · ' + totalEnd.toFixed(1) + '초', 'good');
+      logActivity('🔊', '음성 ' + timeline.length + '문장 · ' + totalEnd.toFixed(1) + '초 · ' + voiceInfo(voice).name + ' · 간격 ' + gapLabel(gap));
       const vm = $('#voiceModeBadge'); if (vm) { vm.className = 'badge ' + (mode === 'gemini' ? 'live' : 'demo'); vm.textContent = mode === 'gemini' ? 'Gemini TTS' : mode === 'mixed' ? '혼합' : '데모 합성음'; }
     } catch (e) {
       status.textContent = errMsg(e); toast('음성 실패: ' + errMsg(e), 'bad');
@@ -1218,7 +1379,8 @@
   function sentenceAt(t) {
     const v = state.voice;
     if (!v) return -1;
-    for (const row of v.timeline) { if (t >= row.start && t < row.end + 0.16) return row.i; }
+    const gap = v.gap == null ? state.voiceGap : v.gap;
+    for (const row of v.timeline) { if (t >= row.start && t < row.end + gap) return row.i; }
     return -1;
   }
 
@@ -1243,9 +1405,9 @@
     const total = v.total;
     const tl = $('#totalLen'); if (tl) tl.textContent = total.toFixed(1) + 's';
     const il = $('#infoLen'); if (il) il.textContent = total.toFixed(1) + 's';
-    const vt = $('#voiceTitle'); if (vt) vt.textContent = (VOICES[v.voice] || {}).name || '음성';
+    const vt = $('#voiceTitle'); if (vt) vt.textContent = voiceInfo(v.voice).name + ' · ' + voiceInfo(v.voice).desc;
     const vs = $('#voiceSub');
-    if (vs) vs.textContent = (v.mode === 'gemini' ? 'Gemini TTS' : v.mode === 'mixed' ? 'Gemini + 합성음' : '브라우저 합성음(데모)') + ' · ' + v.timeline.length + '문장 · ' + (v.speed || 1).toFixed(2) + 'x';
+    if (vs) vs.textContent = (v.mode === 'gemini' ? 'Gemini TTS' : v.mode === 'mixed' ? 'Gemini + 합성음' : '브라우저 합성음(데모)') + ' · ' + v.timeline.length + '문장 · 문장 사이 ' + gapLabel(v.gap == null ? state.voiceGap : v.gap) + ' · ' + (v.speed || 1).toFixed(2) + 'x';
     updatePreviewMeta();
   }
 
@@ -1356,18 +1518,20 @@
   function previewTimeline() {
     if (state.voice) return state.voice.timeline;
     if (!state.script) return [];
+    const gap = state.voiceGap;
     let t = 0;
     return state.script.sentences.map((s, i) => {
       const d = clamp((s.text || '').length * 0.15, 1.3, 6);
       const row = { i, start: t, dur: d, end: t + d };
-      t += d + 0.16;
+      t += d + gap;
       return row;
     });
   }
   function totalDuration() { const tl = previewTimeline(); return tl.length ? tl[tl.length - 1].end : 0; }
   function indexAt(t) {
     const tl = previewTimeline();
-    for (const row of tl) { if (t >= row.start && t < row.end + 0.16) return row.i; }
+    const gap = state.voice && state.voice.gap != null ? state.voice.gap : state.voiceGap;
+    for (const row of tl) { if (t >= row.start && t < row.end + gap) return row.i; }
     return tl.length ? tl[tl.length - 1].i : -1;
   }
 
@@ -1902,6 +2066,7 @@
     if (info) info.textContent = '540×960 WebM · ' + dur.toFixed(1) + '초 · 음성 ' + (state.voice.mode === 'gemini' ? 'Gemini TTS' : '합성음') + ' 포함';
     state.exported++;
     addHistoryFromProduct(true);
+    logActivity('⬇️', 'WebM 내보내기 · ' + dur.toFixed(1) + '초 · ' + (blob.size / 1048576).toFixed(2) + 'MB');
     toast('WebM 완성 · ' + (blob.size / 1048576).toFixed(2) + 'MB', 'good');
     return blob;
   }
@@ -1968,6 +2133,7 @@
       renderTitles();
       st.textContent = (out.demo ? '데모' : 'Gemini') + ' 추천 완료 · 제목 ' + out.list.length + '개 · 하나를 고르면 설명이 채워집니다' + (out.__fallback ? ' (Gemini 실패 → 데모)' : '');
       toast('제목 ' + out.list.length + '개를 추천했습니다', 'good');
+      logActivity('💡', '제목 ' + out.list.length + '개 추천 · 해시테그 ' + (out.hashtags || []).length + '개');
     } catch (e) {
       st.textContent = errMsg(e); toast('제목 추천 실패: ' + errMsg(e), 'bad');
     } finally {
@@ -2149,15 +2315,16 @@
     const tags = (t.hashtags || []).map(x => '#' + x);
     const link = coupangLink();
     const disc = state.coupang.disclosure ? disclosureText() : '';
+    const aiLine = state.famous.aiMark ? '이 영상은 AI로 만든 합성 콘텐츠입니다.' : '';
     const desc = ($('#descInput') && $('#descInput').value) || t.desc || '';
     const hook = (p.hooks && p.hooks[0]) || '';
-    const common = [desc, disc].filter(Boolean).join('\n\n');
+    const common = [desc, disc, aiLine].filter(Boolean).join('\n\n');
     const texts = {
       yt: [title, '', common, link ? '👉 ' + link : '', (tags.join(' ') + ' #Shorts').trim()].filter(Boolean).join('\n'),
-      tt: [title, hook ? '· ' + hook : '', link ? 'link in bio · ' + link : '', tags.join(' ')].filter(Boolean).join('\n'),
-      ig: [title, '', desc, disc, link ? '🔗 ' + link : '', tags.join(' ')].filter(Boolean).join('\n'),
-      th: [title + (hook ? ' — ' + hook : ''), link ? '👉 ' + link : '', tags.slice(0, 5).join(' '), disc].filter(Boolean).join('\n'),
-      fb: [title, '', desc, disc, link ? link : '', tags.join(' ')].filter(Boolean).join('\n')
+      tt: [title, hook ? '· ' + hook : '', link ? 'link in bio · ' + link : '', aiLine, tags.join(' ')].filter(Boolean).join('\n'),
+      ig: [title, '', desc, disc, aiLine, link ? '🔗 ' + link : '', tags.join(' ')].filter(Boolean).join('\n'),
+      th: [title + (hook ? ' — ' + hook : ''), link ? '👉 ' + link : '', tags.slice(0, 5).join(' '), disc, aiLine].filter(Boolean).join('\n'),
+      fb: [title, '', desc, disc, aiLine, link ? link : '', tags.join(' ')].filter(Boolean).join('\n')
     };
     state.hubTexts = texts;
   }
@@ -2216,6 +2383,7 @@
     state.history.push(row);
     lsSet(LS.hist, state.history);
     renderHistory();
+    logActivity('🏷️', '쿠팡 링크 추가 · ' + p.name + (row.auto ? ' (자동 생성)' : ''));
     if (!silent) toast('링크 히스토리에 추가했습니다', 'good');
   }
   function addHistoryManual() {
@@ -2225,6 +2393,7 @@
     state.history.push({ id: uid('h'), name, link, date: new Date().toISOString(), auto: !state.history.some(h => h.link === link) });
     lsSet(LS.hist, state.history);
     renderHistory(); buildHubTexts(); renderHub();
+    logActivity('🏷️', '쿠팡 링크 직접 추가 · ' + name);
     toast(link ? '링크를 추가했습니다' : '링크가 비어 있습니다 · 자동 생성을 켜 보세요', link ? 'good' : 'bad');
   }
   function renderHistory() {
@@ -2252,46 +2421,626 @@
     lsSet(LS.hist, state.history); renderHistory(); buildHubTexts(); renderHub();
   }
 
+  /* ---------------- 내 성과 ---------------- */
+  function logActivity(ico, text) {
+    state.activity.unshift({ t: Date.now(), ico: ico || '•', text: String(text || '') });
+    if (state.activity.length > 40) state.activity.length = 40;
+    renderPerf();
+  }
+  function renderPerf() {
+    const grid = $('#perfStats');
+    const sentences = state.script ? state.script.sentences.length : 0;
+    const voiceLen = state.voice ? state.voice.total : 0;
+    const titles = state.titles && state.titles.list ? state.titles.list.length : 0;
+    if (grid) {
+      const items = [
+        { k: '대본 문장', v: String(sentences), u: '문장', cls: '' },
+        { k: '음성 길이', v: voiceLen ? voiceLen.toFixed(1) : '–', u: voiceLen ? '초' : '', cls: 'mint' },
+        { k: '내보낸 영상', v: String(state.exported || 0), u: '개', cls: 'acc' },
+        { k: '제목 후보', v: String(titles), u: '개', cls: '' },
+        { k: '레퍼런스', v: String(state.refs.length), u: '개', cls: 'blue' },
+        { k: '담은 장면', v: String(state.refs.filter(r => r.inCart).length), u: '개', cls: '' },
+        { k: '쿠팡 링크', v: String(state.history.length), u: '개', cls: '' },
+        { k: '로그인 계정', v: loginCount() + '/6', u: '', cls: 'mint' }
+      ];
+      grid.innerHTML = items.map(it => '<div class="stat ' + it.cls + '"><span class="k">' + it.k + '</span><span class="v">' + it.v + (it.u ? '<small>' + it.u + '</small>' : '') + '</span></div>').join('');
+    }
+    const list = $('#perfActivity'), empty = $('#perfEmpty'), cnt = $('#perfCount');
+    if (cnt) cnt.textContent = state.activity.length + '건';
+    if (empty) empty.classList.toggle('hidden', state.activity.length > 0);
+    if (list) list.innerHTML = state.activity.map(a => {
+      const d = new Date(a.t);
+      return '<div class="act"><span class="ico">' + a.ico + '</span><span class="txt">' + esc(a.text) + '</span><span class="t">' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + '</span></div>';
+    }).join('');
+    const g = $('#perfGoalBadge');
+    if (g) g.textContent = (state.exported || 0) + ' / ' + state.famous.perDay;
+  }
+
+  /* ---------------- 도구 · 🔥 유명 쇼츠 ---------------- */
+  const FAMOUS = { playing: false, t: 0, raf: 0, t0: 0, live: false };
+  function loadFamous() {
+    const saved = lsGet(LS.famous, null);
+    if (saved && typeof saved === 'object') {
+      const f = state.famous;
+      ['layout', 'noThumb', 'sources', 'aiMark', 'topN', 'topPos', 'topCount', 'tz', 'perDay', 'random', 'title', 'caption'].forEach(k => { if (saved[k] != null) f[k] = saved[k]; });
+      if (Array.isArray(saved.accounts) && saved.accounts.length) {
+        f.accounts = saved.accounts.slice(0, 8).map((a, i) => ({ id: a.id || ('fa' + (i + 1)), name: a.name || ('계정 ' + (i + 1)), time: a.time || '12:00' }));
+      }
+      if (!Array.isArray(f.sources) || !f.sources.length) f.sources = ['tiktok', 'youtube', 'instagram'];
+      f.perDay = clamp(Math.round(Number(f.perDay) || 10), 1, 50);
+      f.topCount = clamp(Math.round(Number(f.topCount) || 5), 2, 30);
+    }
+  }
+  function saveFamous(silent) {
+    lsSet(LS.famous, state.famous);
+    if (!silent) toast('유명 쇼츠 설정을 저장했습니다', 'good');
+  }
+  function famousDur() {
+    if (state.voice) return Math.max(1, state.voice.total);
+    const tl = totalDuration();
+    if (tl > 0) return tl;
+    const f = state.files[0];
+    return Math.min(8, Math.max(3, (f && f.duration) || 6));
+  }
+  function posName(p) { return ({ tl: '왼쪽 위', tr: '오른쪽 위', bl: '왼쪽 아래' })[p] || '왼쪽 위'; }
+  function syncVal(sel, val) { const el = $(sel); if (el && document.activeElement !== el && el.value !== String(val)) el.value = String(val); }
+  function syncChk(sel, val) { const el = $(sel); if (el && el.checked !== !!val) el.checked = !!val; }
+
+  function famousCandidates() {
+    const f = state.famous;
+    return state.refs.filter(r => f.sources.includes(r.platform)).slice(0, 8);
+  }
+  function famousSourceScene() {
+    const f = state.famous;
+    if (f.pick) {
+      const ref = state.refs.find(r => r.id === f.pick);
+      if (ref) return { kind: 'ref', motif: ref.motif, palette: ref.palette, label: ref.title };
+    }
+    const sc = state.scenes.find(s => !s.muted) || state.scenes[0];
+    if (sc) return sc;
+    const p = state.product || {};
+    return { kind: 'generated', motif: 1, palette: p.palette || ['#ff7a45', '#6b4bff'], label: '자동 생성' };
+  }
+  function famousSlot(acct, dayOffset) {
+    const f = state.famous;
+    const d = new Date(); d.setDate(d.getDate() + (dayOffset || 0));
+    const r = rng(hash32(acct.id + '|' + d.toDateString() + '|' + acct.time));
+    const parts = String(acct.time || '12:00').split(':').map(Number);
+    const base = (parts[0] || 0) * 3600 + (parts[1] || 0) * 60;
+    const off = f.random ? Math.round(r() * 3600 - 1800) : 0;
+    const sec = (base + off + 86400) % 86400;
+    return { day: d, sec, hh: Math.floor(sec / 3600), mm: Math.floor((sec % 3600) / 60), ss: sec % 60 };
+  }
+  function fmtSlot(sl) { return pad(sl.hh) + ':' + pad(sl.mm) + ':' + pad(sl.ss); }
+  function famousConfig() {
+    const f = state.famous;
+    return {
+      app: 'shorts-vending', kind: 'famous-shorts-schedule', version: 2,
+      generatedAt: new Date().toISOString(),
+      timezone: f.tz, perDay: f.perDay, randomizeWithinSeconds: f.random ? 1800 : 0,
+      layout: f.layout, useThumbnail: !f.noThumb, sources: f.sources.slice(),
+      marks: { ai: !!f.aiMark, topN: !!f.topN, topCount: f.topCount, position: f.topPos },
+      title: f.title || '', caption: f.caption || '',
+      accounts: f.accounts.map(a => ({
+        name: a.name, baseTime: a.time,
+        slots: [0, 1, 2].map(k => { const s = famousSlot(a, k); return s.day.toISOString().slice(0, 10) + 'T' + fmtSlot(s); })
+      }))
+    };
+  }
+  function famousConfigText() { return JSON.stringify(famousConfig(), null, 2); }
+
+  function renderFamousCandidates() {
+    const wrap = $('#famousCandidates'), empty = $('#famousCandEmpty');
+    if (!wrap) return;
+    const list = famousCandidates();
+    if (empty) empty.classList.toggle('hidden', list.length > 0);
+    wrap.innerHTML = list.map(r =>
+      '<div class="cand ' + (state.famous.pick === r.id ? 'on' : '') + '" data-cand="' + r.id + '">' +
+      platformBadge(r.platform) + '<span class="meta"><b>' + esc(r.title) + '</b><span>' + esc(r.features || '') + '</span></span>' +
+      '<span class="v">▶ ' + fmtNum(r.views) + '</span>' +
+      '<button class="btn xs ' + (state.famous.pick === r.id ? 'mint' : 'soft') + '" type="button" data-cand-pick="' + r.id + '">' + (state.famous.pick === r.id ? '골랐음 ✓' : '이 소재로') + '</button></div>').join('');
+    const hint = $('#famousCandHint');
+    if (hint) hint.textContent = list.length ? (state.refs.length ? '2단계 레퍼런스에서' : '데모 목록') : '소재 없음';
+  }
+  function renderFamousAccounts() {
+    const wrap = $('#famousAccounts'); if (!wrap) return;
+    const f = state.famous;
+    wrap.innerHTML = f.accounts.map((a, i) =>
+      '<div class="acct-row" data-fa="' + a.id + '">' +
+      '<input type="text" data-fa-name="' + i + '" value="' + esc(a.name) + '" maxlength="18" aria-label="계정 이름">' +
+      '<input type="time" data-fa-time="' + i + '" value="' + esc(a.time) + '" aria-label="' + esc(a.name) + ' 올릴 시각">' +
+      '<button class="btn xs danger" type="button" data-fa-del="' + i + '" aria-label="계정 삭제">✕</button></div>').join('');
+    const hint = $('#famousAcctHint');
+    if (hint) hint.textContent = f.accounts.length + '개 계정 · 하루 ' + f.perDay + '개까지';
+  }
+  function renderFamousSched() {
+    const body = $('#famousSchedBody'); if (!body) return;
+    const f = state.famous;
+    if (!f.accounts.length) { body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--dim);padding:14px">계정을 추가하면 스케줄이 나옵니다</td></tr>'; return; }
+    body.innerHTML = f.accounts.map(a => {
+      const slots = [0, 1, 2].map(k => famousSlot(a, k));
+      return '<tr data-fsched="' + a.id + '"><td>' + esc(a.name) + '</td>' +
+        '<td class="mono">' + esc(a.time) + '</td>' +
+        slots.map(sl => '<td class="mono">' + fmtSlot(sl) + '</td>').join('') + '</tr>';
+    }).join('');
+    const hint = $('#famousRandomHint');
+    if (hint) hint.textContent = f.random ? '±30분 랜덤 (분·초까지)' : '설정 시각 그대로';
+  }
+
+  /* ---- 유명 쇼츠 렌더러 ---- */
+  function drawVideoIn(ctx, el, x, y, w, h) {
+    const vw = el.videoWidth || 9, vh = el.videoHeight || 16;
+    const s = Math.max(w / vw, h / vh);
+    ctx.drawImage(el, x + (w - vw * s) / 2, y + (h - vh * s) / 2, vw * s, vh * s);
+  }
+  function drawSceneInto(ctx, x, y, w, h, sc, tt, gt) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    ctx.fillStyle = '#0a0f16'; ctx.fillRect(x, y, w, h);
+    let drew = false;
+    if (sc && sc.kind === 'clip') {
+      const file = state.files.find(f => f.id === sc.fileId) || state.files[0];
+      if (file && file.el && file.el.readyState >= 2) {
+        const dur = file.el.duration || file.duration || 1;
+        const vt = tt % Math.max(0.2, dur);
+        if (!FAMOUS.live && Math.abs(file.el.currentTime - vt) > 0.3) { try { file.el.currentTime = vt; } catch (e) {} }
+        try { drawVideoIn(ctx, file.el, x, y, w, h); drew = true; } catch (e) {}
+      }
+    }
+    if (!drew) {
+      const pal = (sc && sc.palette) || (state.product && state.product.palette) || ['#ff7a45', '#6b4bff'];
+      const lg = ctx.createLinearGradient(x, y, x + w, y + h);
+      lg.addColorStop(0, pal[1] || '#26344a'); lg.addColorStop(1, pal[0] || '#ff7a45');
+      ctx.fillStyle = lg; ctx.fillRect(x, y, w, h);
+      ctx.save(); ctx.translate(x, y);
+      drawMotif(ctx, w, h, (sc && sc.motif) || 0, gt * 0.8, pal);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  function wrapTextCenter(ctx, text, cx, cy, maxW, lineH, maxLines) {
+    const words = String(text || '').split(/\s+/).filter(Boolean);
+    const lines = []; let line = '';
+    words.forEach(w => {
+      const test = line ? line + ' ' + w : w;
+      if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; } else line = test;
+    });
+    if (line) lines.push(line);
+    const show = lines.slice(0, maxLines || 2);
+    const start = cy - (show.length - 1) * lineH / 2;
+    show.forEach((l, i) => ctx.fillText(l, cx, start + i * lineH));
+    return show.length;
+  }
+  function drawFamousMarks(ctx, W, H, t, dur) {
+    const f = state.famous;
+    if (!f.aiMark && !f.topN) return;
+    const padX = Math.round(W * 0.045), padY = Math.round(H * 0.035);
+    const right = f.topPos === 'tr';
+    const bottom = f.topPos === 'bl';
+    // 위아래 검은 화면에서는 제목·문구 영역을 피해 오버레이를 놓는다
+    const topOffset = f.layout === 'banded' ? Math.round(H * 0.135) : 0;
+    const botOffset = f.layout === 'banded' ? Math.round(H * 0.175) : 0;
+    const fam = FONT_STACK.sans;
+    const gap = Math.round(H * 0.012);
+    ctx.save();
+    ctx.textBaseline = 'top';
+    let yCur = bottom ? H - padY - botOffset : padY + topOffset;
+    // AI 표기
+    if (f.aiMark) {
+      const fs = Math.round(W * 0.036);
+      ctx.font = '800 ' + fs + 'px ' + fam;
+      const label = 'AI 생성';
+      const bw = ctx.measureText(label).width + fs * 1.6, bh = fs * 1.9;
+      const bx = right ? W - padX - bw : padX;
+      const by = bottom ? yCur - bh : yCur;
+      ctx.fillStyle = 'rgba(0,0,0,.66)';
+      roundRect(ctx, bx, by, bw, bh, bh / 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = Math.max(1, W * 0.003);
+      roundRect(ctx, bx, by, bw, bh, bh / 2); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+      ctx.fillText(label, bx + bw / 2, by + (bh - fs) / 2);
+      yCur = bottom ? by - gap : by + bh + gap;
+    }
+    // TOP N 카운트다운
+    if (f.topN) {
+      const n = clamp(Math.round(Number(f.topCount) || 5), 2, 30);
+      const remain = Math.max(1, Math.ceil(n * (1 - (dur ? clamp(t / dur, 0, 1) : 0))));
+      const bw = Math.round(W * 0.22), bh = Math.round(H * 0.125);
+      const bx = right ? W - padX - bw : padX;
+      const by = bottom ? yCur - bh : yCur;
+      ctx.fillStyle = 'rgba(0,0,0,.68)';
+      roundRect(ctx, bx, by, bw, bh, Math.round(bw * 0.16)); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,122,69,.8)'; ctx.lineWidth = Math.max(2, W * 0.006);
+      roundRect(ctx, bx, by, bw, bh, Math.round(bw * 0.16)); ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffd166';
+      ctx.font = '800 ' + Math.round(W * 0.032) + 'px ' + fam;
+      ctx.fillText('TOP', bx + bw / 2, by + bh * 0.12);
+      ctx.fillStyle = '#fff';
+      ctx.font = '900 ' + Math.round(W * 0.088) + 'px ' + fam;
+      ctx.fillText(String(remain), bx + bw / 2, by + bh * 0.36);
+    }
+    ctx.restore();
+  }
+  function drawFamousFrame(ctx, W, H, t) {
+    const f = state.famous;
+    const dur = famousDur();
+    const tt = dur > 0 ? (((t % dur) + dur) % dur) : t;
+    const sc = famousSourceScene();
+    const fam = FONT_STACK.sans;
+    ctx.save();
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#05080c'; ctx.fillRect(0, 0, W, H);
+    const title = String(f.title || (state.script && state.script.titles && state.script.titles[0]) || (state.product && state.product.name) || '유명 쇼츠').slice(0, 40);
+    const caption = String(f.caption || '').trim();
+    if (f.layout === 'banded') {
+      const topH = Math.round(H * 0.135), botH = Math.round(H * 0.175);
+      const vidH = H - topH - botH;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      let fs = Math.round(W * 0.072);
+      ctx.font = '900 ' + fs + 'px ' + fam;
+      while (fs > 18 && ctx.measureText(title).width > W * 0.88) { fs -= 2; ctx.font = '900 ' + fs + 'px ' + fam; }
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(title, W / 2, topH / 2);
+      drawSceneInto(ctx, 0, topH, W, vidH, sc, tt, t);
+      if (caption) {
+        const cfs = Math.round(W * 0.05);
+        ctx.fillStyle = 'rgba(255,255,255,.94)';
+        ctx.font = '700 ' + cfs + 'px ' + fam;
+        wrapTextCenter(ctx, caption, W / 2, topH + vidH + botH / 2, W * 0.86, cfs * 1.35, 2);
+      }
+    } else {
+      drawSceneInto(ctx, 0, 0, W, H, sc, tt, t);
+      if (caption) {
+        const strip = Math.round(H * 0.11);
+        const g = ctx.createLinearGradient(0, H - strip, 0, H);
+        g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.8)');
+        ctx.fillStyle = g; ctx.fillRect(0, H - strip, W, strip);
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const cfs = Math.round(W * 0.05);
+        ctx.font = '700 ' + cfs + 'px ' + fam;
+        wrapTextCenter(ctx, caption, W / 2, H - strip * 0.46, W * 0.88, cfs * 1.3, 2);
+      }
+    }
+    drawFamousMarks(ctx, W, H, tt, dur);
+    ctx.restore();
+  }
+  function drawFamousPreview() {
+    const cv = $('#famousCanvas'); if (!cv) return;
+    drawFamousFrame(cv.getContext('2d'), cv.width, cv.height, FAMOUS.t);
+    const total = famousDur();
+    const seek = $('#famousSeek');
+    if (seek && document.activeElement !== seek) seek.value = String(Math.round(total ? FAMOUS.t / total * 1000 : 0));
+    const tl = $('#famousTimeLabel'); if (tl) tl.textContent = fmtTime(FAMOUS.t) + ' / ' + fmtTime(total);
+    const lb = $('#famousInfoLayout'); if (lb) lb.textContent = state.famous.layout === 'banded' ? '위아래 검은 화면' : '꽉 찬 화면';
+    const mb = $('#famousInfoMark');
+    if (mb) mb.textContent = (state.famous.aiMark || state.famous.topN) ? [state.famous.aiMark ? 'AI' : '', state.famous.topN ? 'TOP ' + state.famous.topCount : ''].filter(Boolean).join(' · ') + ' · ' + posName(state.famous.topPos) : '표기 없음';
+  }
+  function stopFamousPlay() {
+    FAMOUS.playing = false;
+    cancelAnimationFrame(FAMOUS.raf);
+    const b = $('#famousPlay'); if (b) b.textContent = '▶';
+    drawFamousPreview();
+  }
+  function toggleFamousPlay() {
+    if (FAMOUS.playing) { stopFamousPlay(); return; }
+    FAMOUS.playing = true;
+    FAMOUS.t0 = performance.now() / 1000 - FAMOUS.t;
+    const b = $('#famousPlay'); if (b) b.textContent = '⏸';
+    const step = () => {
+      if (!FAMOUS.playing) return;
+      const total = famousDur();
+      FAMOUS.t = performance.now() / 1000 - FAMOUS.t0;
+      if (FAMOUS.t >= total) { FAMOUS.t = total; stopFamousPlay(); return; }
+      drawFamousPreview();
+      FAMOUS.raf = requestAnimationFrame(step);
+    };
+    FAMOUS.raf = requestAnimationFrame(step);
+  }
+  function renderFamous() {
+    const f = state.famous;
+    syncVal('#famousLayout', f.layout);
+    syncVal('#famousTitle', f.title || '');
+    syncVal('#famousCaption', f.caption || '');
+    syncVal('#famousTz', f.tz);
+    syncVal('#famousPos', f.topPos);
+    syncVal('#famousTopCount', f.topCount);
+    syncChk('#famousNoThumb', f.noThumb);
+    syncChk('#famousAiMark', f.aiMark);
+    syncChk('#famousTopN', f.topN);
+    syncChk('#famousRandom', f.random);
+    const pd = $('#famousPerDay'); if (pd) pd.textContent = String(f.perDay);
+    const tzb = $('#famousTzBadge'); if (tzb) tzb.textContent = f.tz;
+    const lb = $('#famousLayoutBadge'); if (lb) lb.textContent = f.layout === 'banded' ? '위아래 검은 화면' : '꽉 찬 화면';
+    const mb = $('#famousMarkBadge'); if (mb) mb.textContent = (f.aiMark ? 'AI' : '표기 없음') + (f.topN ? ' · TOP ' + f.topCount : '');
+    const sc = $('#famousSrcCount'); if (sc) sc.textContent = f.sources.length + '곳';
+    $$('#famousSources [data-src]').forEach(b => b.classList.toggle('on', f.sources.includes(b.dataset.src)));
+    renderFamousCandidates(); renderFamousAccounts(); renderFamousSched();
+    drawFamousPreview();
+    const jst = $('#famousJsonStatus');
+    if (jst && !jst.dataset.keep) jst.textContent = 'PC 패키지 자동 스케줄에 넣어 씁니다 · ' + f.accounts.length + '개 계정';
+  }
+
+  /* ---- 캔버스 녹화(유명 쇼츠·자막 지우개 공용) ---- */
+  async function recordClip(drawFn, dur, ui, opts) {
+    opts = opts || {}; ui = ui || {};
+    const W = 540, H = 960;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    cv.style.cssText = 'position:fixed;left:-10000px;top:0;width:540px;height:960px';
+    document.body.appendChild(cv);
+    const ctx = cv.getContext('2d');
+    const stream = cv.captureStream(30);
+    const ac = getAC();
+    let dest = null;
+    if (opts.audio) {
+      dest = ac.createMediaStreamDestination();
+      dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+    }
+    const mime = pickMime();
+    let rec;
+    try { rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 4200000, audioBitsPerSecond: 128000 } : undefined); }
+    catch (e) { cv.remove(); throw e; }
+    const chunks = [];
+    rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    const done = new Promise(res => { rec.onstop = () => res(new Blob(chunks, { type: 'video/webm' })); });
+    rec.start(1000);
+    const startAt = ac.currentTime + 0.18;
+    if (opts.audio) { try { opts.audio(dest, ac, startAt); } catch (e) {} }
+    if (ui.prog) ui.prog.classList.add('on');
+    const t0 = performance.now();
+    await new Promise(resolve => {
+      function frame() {
+        const elapsed = (performance.now() - t0) / 1000;
+        const t = Math.min(dur, elapsed);
+        try { drawFn(ctx, W, H, t); } catch (e) {}
+        if (ui.bar) ui.bar.style.width = Math.round(elapsed / dur * 100) + '%';
+        if (ui.status) ui.status.textContent = (ui.label || '녹화') + ' 녹화 중… ' + elapsed.toFixed(1) + ' / ' + dur.toFixed(1) + '초';
+        if (elapsed >= dur) { resolve(); return; }
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    });
+    try { rec.stop(); } catch (e) {}
+    const blob = await done;
+    stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+    if (dest) dest.stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+    cv.remove();
+    if (ui.prog) ui.prog.classList.remove('on');
+    return blob;
+  }
+
+  async function exportFamousWebM() {
+    if (exporting) { toast('이미 내보내는 중입니다'); return; }
+    exporting = true;
+    stopFamousPlay(); stopPlayback();
+    const dur = famousDur();
+    const status = $('#famousExportStatus'), bar = $('#famousBar'), prog = $('#famousProg');
+    FAMOUS.live = true;
+    const srcFile = state.files.find(f => f.el && f.el.readyState >= 2);
+    let blob = null;
+    try {
+      blob = await recordClip((ctx, W, H, t) => drawFamousFrame(ctx, W, H, t), dur, { prog, bar, status, label: '유명 쇼츠' }, {
+        audio: (dest, ac, startAt) => {
+          if (!state.voice) return;
+          state.voice.timeline.forEach((row, i) => {
+            const src = ac.createBufferSource(); src.buffer = state.voice.buffers[i];
+            const g = ac.createGain(); g.gain.value = 1;
+            src.connect(g); g.connect(dest);
+            try { src.start(startAt + row.start); } catch (e) {}
+          });
+        }
+      });
+    } catch (e) { toast('내보내기 실패: ' + (e.message || e), 'bad'); }
+    if (srcFile && srcFile.el) { try { srcFile.el.pause(); } catch (e) {} }
+    FAMOUS.live = false;
+    exporting = false;
+    if (!blob || blob.size < 1024) { if (status) status.textContent = '내보내기 실패 · 데이터 없음'; return; }
+    const url = URL.createObjectURL(blob);
+    const name = 'famous-shorts-' + new Date().toISOString().slice(0, 10) + '.webm';
+    const a = $('#famousExportLink'); if (a) { a.href = url; a.download = name; a.classList.remove('hidden'); }
+    if (status) status.textContent = '완료 · ' + (blob.size / 1048576).toFixed(2) + 'MB · ' + dur.toFixed(1) + '초';
+    state.exported++;
+    logActivity('🔥', '유명 쇼츠 WebM 내보내기 · ' + dur.toFixed(1) + '초 · ' + (state.famous.layout === 'banded' ? '위아래 검은 화면' : '꽉 찬 화면'));
+    toast('유명 쇼츠 WebM 완성 · ' + (blob.size / 1048576).toFixed(2) + 'MB', 'good');
+    return blob;
+  }
+
+  /* ---------------- 도구 · 멀티 다운로더 ---------------- */
+  function parseMultiLinks(text) {
+    const seen = new Set(), out = [];
+    String(text || '').split(/\r?\n/).forEach(line => {
+      const m = line.match(/https?:\/\/[^\s"'<>]+/i);
+      if (!m) return;
+      const url = m[0].replace(/[),.;]+$/, '');
+      if (seen.has(url)) return;
+      seen.add(url); out.push(url);
+    });
+    return out.slice(0, 50);
+  }
+  function loadMulti() {
+    const saved = lsGet(LS.multi, null);
+    if (saved && Array.isArray(saved.links)) state.multi.links = saved.links.slice(0, 50).map(String);
+    const ta = $('#multiInput'); if (ta) ta.value = state.multi.links.join('\n');
+  }
+  function setMulti(text, silent) {
+    state.multi.links = parseMultiLinks(text);
+    lsSet(LS.multi, state.multi);
+    renderMulti();
+    if (!silent) toast(state.multi.links.length + '개 링크를 정리했습니다', state.multi.links.length ? 'good' : 'bad');
+  }
+  function multiCommand() {
+    const links = state.multi.links;
+    if (!links.length) return '링크를 넣으면 여기에 다운로드 명령이 만들어집니다.';
+    return 'yt-dlp -f "bv*+ba/b" --no-playlist -P downloads "' + links.join('" "') + '"' +
+      '\n\n# 또는 links.txt로 저장한 뒤\n# yt-dlp -a links.txt -f "bv*+ba/b" --no-playlist -P downloads';
+  }
+  function renderMulti() {
+    const links = state.multi.links;
+    const cnt = $('#multiCount'); if (cnt) cnt.textContent = links.length + '개';
+    const cmd = $('#multiCmd'); if (cmd) cmd.textContent = multiCommand();
+    const list = $('#multiList');
+    if (list) list.innerHTML = links.map((u, i) =>
+      '<div class="link-item" data-multi-item="' + i + '"><span class="idx">' + (i + 1) + '</span>' +
+      '<span class="meta"><b>' + esc(linkTitle(u, platformOf(u))) + '</b><span>' + esc(u) + '</span></span>' +
+      platformBadge(platformOf(u)) +
+      '<span class="acts"><button class="btn xs danger" type="button" data-multi-del="' + i + '" title="빼기">✕</button></span></div>').join('');
+    const st = $('#multiStatus');
+    if (st) st.textContent = links.length ? links.length + '개 · 중복은 자동으로 뺐습니다.' : '한 번에 최대 50개까지 정리합니다.';
+  }
+  function downloadText(name, text, mime) {
+    const blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 20000);
+    return blob;
+  }
+
+  /* ---------------- 도구 · 자막 지우개 ---------------- */
+  function eraserFile() {
+    const e = state.eraser;
+    return state.files.find(f => f.id === e.fileId) || state.files[0] || null;
+  }
+  function renderEraserOptions() {
+    const sel = $('#eraserFile'); if (!sel) return;
+    if (!state.files.length) { sel.innerHTML = '<option value="">1단계에서 올린 영상이 없습니다</option>'; return; }
+    const cur = state.eraser.fileId || state.files[0].id;
+    if (!state.eraser.fileId) state.eraser.fileId = cur;
+    sel.innerHTML = state.files.map(f => '<option value="' + f.id + '"' + (f.id === cur ? ' selected' : '') + '>' + esc(f.name) + ' · ' + fmtTime(f.duration) + '</option>').join('');
+  }
+  function syncEraserInputs() {
+    const e = state.eraser;
+    const t = eraserFile();
+    const max = t ? Math.max(0.1, (t.el && t.el.duration) || t.duration || 3) : 3;
+    const ts = $('#eraserTime'); if (ts) ts.max = String(max.toFixed(2));
+    ['#eraserX', '#eraserY', '#eraserW', '#eraserH', '#eraserStrength'].forEach((sel, i) => {
+      const keys = ['x', 'y', 'w', 'h', 'strength'];
+      syncVal(sel, e[keys[i]]);
+    });
+    syncVal('#eraserTime', e.t.toFixed(2));
+    syncVal('#eraserMode', e.mode);
+    const lab = { '#eraserXVal': e.x + '%', '#eraserYVal': e.y + '%', '#eraserWVal': e.w + '%', '#eraserHVal': e.h + '%', '#eraserStrengthVal': e.strength + 'px', '#eraserTimeVal': e.t.toFixed(1) + 's' };
+    Object.keys(lab).forEach(k => { const el = $(k); if (el) el.textContent = lab[k]; });
+    const badge = $('#eraserFileBadge'); if (badge) badge.textContent = t ? t.name.slice(0, 24) : '영상 없음';
+  }
+  function drawEraserFrame(ctx, W, H, guide) {
+    const e = state.eraser;
+    const f = eraserFile();
+    ctx.save();
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#05080c'; ctx.fillRect(0, 0, W, H);
+    let drew = false;
+    if (f && f.el && f.el.readyState >= 2) {
+      try { drawVideoIn(ctx, f.el, 0, 0, W, H); drew = true; } catch (err) {}
+    }
+    if (!drew) {
+      ctx.fillStyle = '#0d151f'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#4f637a';
+      ctx.font = Math.round(W * 0.045) + 'px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('영상을 고르면 여기에 나옵니다', W / 2, H / 2);
+    }
+    const x = Math.round(e.x / 100 * W), y = Math.round(e.y / 100 * H);
+    const w = Math.max(2, Math.round(e.w / 100 * W)), h = Math.max(2, Math.round(e.h / 100 * H));
+    applyBlurRegion(ctx, W, H, x, y, Math.min(w, W - x), Math.min(h, H - y), Math.max(2, e.strength * (H / 960)), e.mode);
+    if (guide) {
+      ctx.strokeStyle = 'rgba(47,227,176,.6)'; ctx.lineWidth = 2; ctx.setLineDash([9, 7]);
+      ctx.strokeRect(x + 1, y + 1, Math.min(w, W - x) - 2, Math.min(h, H - y) - 2);
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+  }
+  function drawEraserPreview(seekTo) {
+    const cv = $('#eraserCanvas'); if (!cv) return;
+    const f = eraserFile();
+    if (f && f.el && seekTo) {
+      const dmax = (f.el.duration || f.duration || 1);
+      const target = clamp(state.eraser.t, 0, Math.max(0.05, dmax - 0.06));
+      try { f.el.currentTime = target; } catch (e) {}
+      if (f.el.readyState >= 2) { setTimeout(() => { const c2 = $('#eraserCanvas'); if (c2) drawEraserFrame(c2.getContext('2d'), c2.width, c2.height, true); }, 120); }
+    }
+    drawEraserFrame(cv.getContext('2d'), cv.width, cv.height, true);
+    const st = $('#eraserStatus');
+    if (st) st.textContent = f ? (f.name + ' · ' + state.eraser.t.toFixed(1) + 's 지점 · ' + gapFreeLabel()) : '영상을 고르면 미리보기가 나옵니다.';
+  }
+  function gapFreeLabel() {
+    return state.eraser.mode === 'mosaic' ? '모자이크 ' + state.eraser.strength + 'px' : '블러 ' + state.eraser.strength + 'px';
+  }
+  async function exportEraserWebM() {
+    if (exporting) { toast('이미 내보내는 중입니다'); return; }
+    const f = eraserFile();
+    if (!f || !f.el) { toast('먼저 영상을 골라 주세요', 'bad'); return; }
+    exporting = true;
+    const dur = Math.min(30, Math.max(0.6, f.el.duration || f.duration || 3));
+    const status = $('#eraserStatus'), bar = $('#eraserBar'), prog = $('#eraserProg');
+    try { f.el.muted = true; f.el.currentTime = 0; await f.el.play(); } catch (e) {}
+    let blob = null;
+    try {
+      blob = await recordClip((ctx, W, H) => drawEraserFrame(ctx, W, H, false), dur, { prog, bar, status, label: '자막 지우개' });
+    } catch (e) { toast('내보내기 실패: ' + (e.message || e), 'bad'); }
+    try { f.el.pause(); } catch (e) {}
+    exporting = false;
+    if (!blob || blob.size < 1024) { if (status) status.textContent = '내보내기 실패 · 데이터 없음'; return; }
+    const url = URL.createObjectURL(blob);
+    const name = 'no-subtitle-' + new Date().toISOString().slice(0, 10) + '.webm';
+    const a = $('#eraserLink'); if (a) { a.href = url; a.download = name; a.classList.remove('hidden'); }
+    if (status) status.textContent = '완료 · ' + (blob.size / 1048576).toFixed(2) + 'MB · ' + dur.toFixed(1) + '초 · 영상만(음성 없음)';
+    state.exported++;
+    logActivity('▨', '자막 지우개 WebM 내보내기 · ' + dur.toFixed(1) + '초 · ' + gapFreeLabel());
+    toast('자막 가린 WebM 완성 · ' + (blob.size / 1048576).toFixed(2) + 'MB', 'good');
+    return blob;
+  }
+
   /* ---------------- navigation / progress ---------------- */
-  const STEP_LABEL = ['키 설정', '링크 넣기', '비슷한 제품', '대본·음성', '자동 편집', '썸네일·제목', '다뿔려 업로드', '쿠팡 파트너스'];
+  const STEP_LABEL = ['설정', '링크 넣기', '비슷한 제품', '대본·음성', '자동 편집', '썸네일·제목', '다뿌려 업로드', '쿠팡 파트너스'];
+  const VIEW_ORDER = ['perf', '1', '2', '3', '4', '5', '6', 'multi', 'eraser', 'famous', 'settings', 'coupang'];
+  const VIEW_NUM = { settings: 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, coupang: 7 };
+  const VIEW_NAME = { perf: '내 성과', multi: '멀티 다운로더', eraser: '자막 지우개', famous: '유명 쇼츠', settings: '설정', coupang: '쿠팡 파트너스' };
 
   function stepDone(n) {
     switch (n) {
-      case 0: return realKeys().length > 0;
       case 1: return getItems().length > 0;
       case 2: return !!state.product;
       case 3: return !!(state.script && state.script.sentences.length && state.voice);
       case 4: return !!(state.scenes.length && state.voice);
       case 5: return !!(state.titles && state.titles.pick >= 0);
       case 6: return !!(state.hubTexts && state.hubTexts.yt);
-      case 7: return state.history.length > 0;
       default: return false;
     }
   }
   function refreshRail() {
     $$('#stepRail .step-btn').forEach(b => {
-      const n = +b.dataset.step;
-      b.classList.toggle('done', stepDone(n) && n !== state.step);
+      const raw = b.dataset.step;
+      const n = raw == null || raw === '' ? null : +raw;
+      b.classList.toggle('done', n != null && n >= 1 && n <= 6 && stepDone(n) && b.dataset.view !== state.view);
     });
-    const ss = $('#statusStep'); if (ss) ss.textContent = 'STEP ' + state.step;
+    const ss = $('#statusStep');
+    if (ss) ss.textContent = state.step >= 0 ? 'STEP ' + state.step : (VIEW_NAME[state.view] || '성과');
   }
 
-  function goStep(n, opts) {
+  function goView(id, opts) {
     opts = opts || {};
-    n = clamp(Number(n) || 0, 0, 7);
-    state.step = n;
-    $$('.step-panel').forEach(p => p.classList.toggle('show', +p.dataset.step === n));
+    if (VIEW_ORDER.indexOf(id) < 0) id = 'perf';
+    state.view = id;
+    state.step = VIEW_NUM[id] != null ? VIEW_NUM[id] : -1;
+    $$('.step-panel').forEach(p => p.classList.toggle('show', p.dataset.view === id));
     $$('#stepRail .step-btn').forEach(b => {
-      const on = +b.dataset.step === n;
+      const on = b.dataset.view === id;
       b.classList.toggle('active', on);
-      if (on) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     refreshRail();
-    if (n === 3 && state.script) { /* 대본 화면은 이미 렌딩됨 */ }
-    if (n === 4) { if (!state.scenes.length) buildScenes(); ensurePreview(); updatePreviewMeta(); }
-    if (n === 5) { renderTitles(); renderThumb(); }
-    if (n === 6) { buildHubTexts(); renderHub(); }
-    if (n === 7) { renderHistory(); renderCpBadge(); }
+    if (id === '3') renderHooks();
+    if (id === '4') { if (!state.scenes.length) buildScenes(); ensurePreview(); updatePreviewMeta(); }
+    if (id === '5') { renderTitles(); renderThumb(); }
+    if (id === '6') { buildHubTexts(); renderHub(); }
+    if (id === 'coupang') { renderHistory(); renderCpBadge(); }
+    if (id === 'perf') renderPerf();
+    if (id === 'famous') renderFamous();
+    if (id === 'multi') renderMulti();
+    if (id === 'eraser') { renderEraserOptions(); syncEraserInputs(); drawEraserPreview(); }
+    if (id === 'settings') { renderKeys(); renderAccounts(); }
     if (!opts.keepScroll) {
       try { window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' }); } catch (e) { window.scrollTo(0, 0); }
     }
@@ -2299,8 +3048,14 @@
       const b = $('#stepRail .step-btn.active');
       if (b && b.scrollIntoView) b.scrollIntoView({ block: 'nearest', inline: 'center' });
     }
-    if (n >= 3) ensurePreview();
+    if (['1', '2', '3', '4', '5', '6', 'famous', 'eraser'].indexOf(id) >= 0) ensurePreview();
     drawPreview();
+    drawFamousPreview();
+  }
+  function goStep(n, opts) {
+    const num = Number(n);
+    const id = num === 0 ? 'settings' : num === 7 ? 'coupang' : String(num);
+    goView(id, opts);
   }
 
   /* ---------------- key slot UI actions ---------------- */
@@ -2323,10 +3078,10 @@
     // rail + mobile
     $('#stepRail').addEventListener('click', e => {
       const b = e.target.closest('.step-btn');
-      if (b) goStep(+b.dataset.step);
+      if (b && b.dataset.view) goView(b.dataset.view);
     });
-    $('#mPrev').addEventListener('click', () => goStep(state.step - 1));
-    $('#mNext').addEventListener('click', () => goStep(state.step + 1));
+    $('#mPrev').addEventListener('click', () => goView(VIEW_ORDER[Math.max(0, VIEW_ORDER.indexOf(state.view) - 1)]));
+    $('#mNext').addEventListener('click', () => goView(VIEW_ORDER[Math.min(VIEW_ORDER.length - 1, VIEW_ORDER.indexOf(state.view) + 1)]));
     $('#mPreview').addEventListener('click', () => {
       const el = $('#previewPane');
       if (!el) return;
@@ -2435,6 +3190,9 @@
     });
     $('#btnAddSentence').addEventListener('click', addSentence);
     $('#speedRange').addEventListener('input', () => { $('#speedVal').textContent = Number($('#speedRange').value).toFixed(2) + 'x'; });
+    $('#voiceSel').addEventListener('change', () => { renderVoiceNames(); drawPreview(); });
+    $('#gapSel').addEventListener('change', applyGap);
+    $('#hookChips').addEventListener('click', e => { const b = e.target.closest('[data-hook]'); if (b) applyHook(+b.dataset.hook); });
     $('#btnMakeVoice').addEventListener('click', buildVoice);
     $('#btnPlayVoice').addEventListener('click', togglePreview);
     $('#btnNextEdit').addEventListener('click', () => goStep(4));
@@ -2534,19 +3292,203 @@
       const d = e.target.closest('[data-hist-del]'); if (d) deleteHistory(d.dataset.histDel);
     });
     $('#btnCopyDisclosure').addEventListener('click', () => copyText(disclosureText(), '대가성 문구 복사'));
+
+    // ---- 설정 · 로그인 계정 ----
+    $('#acctList').addEventListener('change', e => {
+      const i = e.target.closest('[data-acct]');
+      if (!i) return;
+      state.accounts[i.dataset.acct] = i.checked;
+      saveAccounts(); renderAccounts(); renderPerf();
+      toast(i.checked ? '로그인해 둔 계정으로 표시했습니다' : '표시를 해제했습니다');
+    });
+    const mainEl = document.querySelector('.main');
+    if (mainEl) mainEl.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) goView(g.dataset.go); });
+
+    // ---- 내 성과 (목표 배지 갱신) ----
+    ['#perfStats', '#perfActivity'].forEach(sel => { const el = $(sel); if (el) el.addEventListener('click', () => {}); });
+
+    // ---- 도구 · 유명 쇼츠 ----
+    const famCommit = () => { saveFamous(true); renderFamous(); renderPerf(); };
+    $('#famousLayout').addEventListener('change', () => {
+      state.famous.layout = $('#famousLayout').value;
+      logActivity('🔥', '유명 쇼츠 화면 구성: ' + (state.famous.layout === 'banded' ? '위아래 검은 화면' : '꽉 찬 화면'));
+      famCommit();
+    });
+    $('#famousTitle').addEventListener('input', () => { state.famous.title = $('#famousTitle').value; saveFamous(true); drawFamousPreview(); });
+    $('#famousCaption').addEventListener('input', () => { state.famous.caption = $('#famousCaption').value; saveFamous(true); drawFamousPreview(); });
+    $('#famousNoThumb').addEventListener('change', () => { state.famous.noThumb = $('#famousNoThumb').checked; famCommit(); });
+    $('#famousAiMark').addEventListener('change', () => {
+      state.famous.aiMark = $('#famousAiMark').checked;
+      buildHubTexts(); renderHub(); famCommit();
+    });
+    $('#famousTopN').addEventListener('change', () => { state.famous.topN = $('#famousTopN').checked; famCommit(); });
+    $('#famousTopCount').addEventListener('input', () => {
+      state.famous.topCount = clamp(Math.round(Number($('#famousTopCount').value) || 5), 2, 30);
+      saveFamous(true); renderFamous();
+    });
+    $('#famousPos').addEventListener('change', () => { state.famous.topPos = $('#famousPos').value; famCommit(); });
+    $('#famousTz').addEventListener('change', () => { state.famous.tz = $('#famousTz').value; famCommit(); });
+    $('#famousMinus').addEventListener('click', () => { state.famous.perDay = clamp(state.famous.perDay - 1, 1, 50); famCommit(); });
+    $('#famousPlus').addEventListener('click', () => { state.famous.perDay = clamp(state.famous.perDay + 1, 1, 50); famCommit(); });
+    $('#famousRandom').addEventListener('change', () => { state.famous.random = $('#famousRandom').checked; famCommit(); });
+    $('#famousSources').addEventListener('click', e => {
+      const c = e.target.closest('[data-src]'); if (!c) return;
+      const s = c.dataset.src;
+      const arr = state.famous.sources.slice();
+      const i = arr.indexOf(s);
+      if (i >= 0) {
+        if (arr.length <= 1) { toast('영상 찾을 곳은 최소 1곳이어야 합니다', 'bad'); return; }
+        arr.splice(i, 1);
+      } else arr.push(s);
+      state.famous.sources = arr;
+      if (state.famous.pick) {
+        const ref = state.refs.find(r => r.id === state.famous.pick);
+        if (!ref || !arr.includes(ref.platform)) state.famous.pick = null;
+      }
+      famCommit();
+    });
+    $('#famousCandidates').addEventListener('click', e => {
+      const b = e.target.closest('[data-cand-pick]'); if (!b) return;
+      state.famous.pick = state.famous.pick === b.dataset.candPick ? null : b.dataset.candPick;
+      famCommit();
+      toast(state.famous.pick ? '소재로 골랐습니다 · 미리보기에 반영' : '소재 선택을 해제했습니다', 'good');
+    });
+    $('#famousAddAcct').addEventListener('click', () => {
+      const f = state.famous;
+      if (f.accounts.length >= 8) { toast('계정은 8개까지 넣을 수 있습니다', 'bad'); return; }
+      f.accounts.push({ id: 'fa' + Date.now().toString(36).slice(-4), name: '계정 ' + (f.accounts.length + 1), time: '12:00' });
+      famCommit();
+    });
+    $('#famousAccounts').addEventListener('input', e => {
+      const n = e.target.closest('[data-fa-name]'), t = e.target.closest('[data-fa-time]');
+      if (n) { state.famous.accounts[+n.dataset.faName].name = n.value; }
+      if (t) { state.famous.accounts[+t.dataset.faTime].time = t.value || '12:00'; }
+      renderFamousSched(); saveFamous(true);
+    });
+    $('#famousAccounts').addEventListener('click', e => {
+      const d = e.target.closest('[data-fa-del]'); if (!d) return;
+      state.famous.accounts.splice(+d.dataset.faDel, 1);
+      if (!state.famous.accounts.length) state.famous.accounts.push({ id: 'fa' + Date.now().toString(36).slice(-4), name: '계정 1', time: '12:00' });
+      famCommit();
+    });
+    $('#famousExportJson').addEventListener('click', () => {
+      const text = famousConfigText();
+      downloadText('sovending-famous-schedule-' + new Date().toISOString().slice(0, 10) + '.json', text, 'application/json;charset=utf-8');
+      const st = $('#famousJsonStatus');
+      if (st) { st.dataset.keep = '1'; st.textContent = 'JSON 내려받음 · ' + state.famous.accounts.length + '개 계정 · ' + state.famous.tz; }
+      logActivity('🗓️', '유명 쇼츠 설정 JSON 내보내기 · ' + state.famous.accounts.length + '개 계정 · ' + state.famous.tz);
+      toast('설정 JSON을 내려받았습니다', 'good');
+    });
+    $('#famousCopyJson').addEventListener('click', () => copyText(famousConfigText(), '설정 JSON 복사'));
+    $('#famousPlay').addEventListener('click', toggleFamousPlay);
+    $('#famousSeek').addEventListener('input', () => {
+      const v = Number($('#famousSeek').value);
+      stopFamousPlay();
+      FAMOUS.t = famousDur() * (v / 1000);
+      drawFamousPreview();
+    });
+    $('#famousExportWebM').addEventListener('click', () => exportFamousWebM());
+
+    // ---- 도구 · 멀티 다운로더 ----
+    let multiTimer = null;
+    $('#multiInput').addEventListener('input', () => {
+      clearTimeout(multiTimer);
+      multiTimer = setTimeout(() => setMulti($('#multiInput').value, true), 220);
+    });
+    $('#multiInput').addEventListener('blur', () => setMulti($('#multiInput').value, true));
+    $('#multiClean').addEventListener('click', () => {
+      const ta = $('#multiInput');
+      setMulti(ta.value, false);
+      ta.value = state.multi.links.join('\n');
+    });
+    $('#multiClear').addEventListener('click', () => { $('#multiInput').value = ''; setMulti('', true); });
+    $('#multiFromStep1').addEventListener('click', () => {
+      const t = state.links.map(l => l.url).join('\n');
+      $('#multiInput').value = t;
+      setMulti(t, true);
+      toast(t ? '1단계 링크 ' + state.links.length + '개를 가져왔습니다' : '1단계에 링크가 없습니다', t ? 'good' : 'bad');
+    });
+    $('#multiList').addEventListener('click', e => {
+      const d = e.target.closest('[data-multi-del]'); if (!d) return;
+      state.multi.links.splice(+d.dataset.multiDel, 1);
+      $('#multiInput').value = state.multi.links.join('\n');
+      setMulti($('#multiInput').value, true);
+    });
+    $('#multiCopyCmd').addEventListener('click', () => copyText(multiCommand(), '명령 복사'));
+    $('#multiCopyUrls').addEventListener('click', () => copyText(state.multi.links.join('\n'), 'URL 목록 복사'));
+    $('#multiDownloadTxt').addEventListener('click', () => {
+      if (!state.multi.links.length) { toast('링크를 먼저 넣어 주세요', 'bad'); return; }
+      downloadText('links.txt', state.multi.links.join('\n'));
+      toast('links.txt를 내려받았습니다', 'good');
+    });
+
+    // ---- 도구 · 자막 지우개 ----
+    $('#eraserFile').addEventListener('change', () => {
+      state.eraser.fileId = $('#eraserFile').value;
+      state.eraser.t = 0;
+      syncEraserInputs(); drawEraserPreview(true);
+    });
+    [['#eraserX', 'x'], ['#eraserY', 'y'], ['#eraserW', 'w'], ['#eraserH', 'h']].forEach(([sel, key]) => {
+      $(sel).addEventListener('input', () => { state.eraser[key] = Number($(sel).value); syncEraserInputs(); drawEraserPreview(); });
+    });
+    $('#eraserStrength').addEventListener('input', () => { state.eraser.strength = Number($('#eraserStrength').value); syncEraserInputs(); drawEraserPreview(); });
+    $('#eraserMode').addEventListener('change', () => { state.eraser.mode = $('#eraserMode').value; syncEraserInputs(); drawEraserPreview(); });
+    $('#eraserTime').addEventListener('input', () => { state.eraser.t = Number($('#eraserTime').value); syncEraserInputs(); drawEraserPreview(true); });
+    $('#eraserReset').addEventListener('click', () => {
+      state.eraser.x = 18; state.eraser.y = 58; state.eraser.w = 64; state.eraser.h = 18;
+      syncEraserInputs(); drawEraserPreview();
+    });
+    $('#eraserUploadBtn').addEventListener('click', () => $('#eraserFileInput').click());
+    $('#eraserFileInput').addEventListener('change', async e => {
+      await addFiles(e.target.files);
+      e.target.value = '';
+      const last = state.files[state.files.length - 1];
+      if (last) state.eraser.fileId = last.id;
+      renderEraserOptions(); syncEraserInputs(); drawEraserPreview(true);
+    });
+    $('#eraserExport').addEventListener('click', () => exportEraserWebM());
+    (function eraserDrag() {
+      const cv = $('#eraserCanvas'); if (!cv) return;
+      let drag = null;
+      const norm = ev => {
+        const r = cv.getBoundingClientRect();
+        return { x: clamp((ev.clientX - r.left) / r.width * 100, 0, 100), y: clamp((ev.clientY - r.top) / r.height * 100, 0, 100) };
+      };
+      cv.addEventListener('pointerdown', ev => { drag = norm(ev); try { cv.setPointerCapture(ev.pointerId); } catch (e) {} });
+      cv.addEventListener('pointermove', ev => {
+        if (!drag) return;
+        const p = norm(ev);
+        state.eraser.x = Math.round(Math.min(drag.x, p.x));
+        state.eraser.y = Math.round(Math.min(drag.y, p.y));
+        state.eraser.w = Math.max(10, Math.round(Math.abs(p.x - drag.x)));
+        state.eraser.h = Math.max(5, Math.round(Math.abs(p.y - drag.y)));
+        syncEraserInputs(); drawEraserPreview();
+      });
+      cv.addEventListener('pointerup', () => {
+        if (!drag) return;
+        drag = null;
+        const st = $('#eraserHint');
+        if (st) st.textContent = '영역을 잡았습니다 · ' + state.eraser.x + '%,' + state.eraser.y + '% · ' + state.eraser.w + '×' + state.eraser.h + '%';
+      });
+    })();
   }
 
   /* ---------------- init ---------------- */
   function init() {
     state.scriptOpts = { lang: 'ko', tone: 'friendly', length: 'normal' };
-    loadKeys(); loadPreset(); loadCoupang();
-    renderKeys(); updateModeUI(); updateAnalyzeHint();
+    loadKeys(); loadPreset(); loadCoupang(); loadAccounts(); loadFamous(); loadMulti();
+    renderKeys(); updateModeUI(); updateAnalyzeHint(); renderAccounts();
     renderLinks(); renderFiles(); renderProduct(); renderRefs(); renderCart();
-    renderScript(); renderTimeline(); renderScenes(); renderTitles(); renderThumb();
+    renderScript(); renderVoiceNames(); renderTimeline(); renderScenes(); renderTitles(); renderThumb();
     buildHubTexts(); renderHub(); renderHistory(); renderCpBadge(); updatePreviewMeta(); updateStyleLabels();
+    const gapSel = $('#gapSel');
+    if (gapSel) gapSel.value = String(state.voiceGap);
+    const gapLab = $('#gapVal'); if (gapLab) gapLab.textContent = gapLabel(state.voiceGap);
+    renderPerf(); renderMulti(); renderEraserOptions(); syncEraserInputs();
     wire();
-    goStep(0, { keepScroll: true });
+    goView('perf', { keepScroll: true });
     drawPreview();
+    drawFamousPreview();
     const vm = $('#voiceModeBadge'); if (vm) { vm.className = 'badge'; vm.textContent = state.demo ? '데모' : '대기'; }
     const pm = $('#previewBadge'); if (pm) pm.textContent = '9:16';
     const em = $('#exportBadge'); if (em) em.textContent = pickMime().includes('vp9') ? '9:16 · WebM/VP9' : '9:16 · WebM';
@@ -2557,13 +3499,22 @@
 
   /* 테스트·고급 사용용 공개 훅(읽기/자동화). UI와 같은 코드 경로를 쓴다. */
   window.SV = {
-    version: '1.0.0', state, PV,
-    goStep, syncLinks, runAnalysis, writeScript, buildVoice, exportWebM, drawFrame, drawPreview,
+    version: '2.0.0', state, PV, FAMOUS,
+    goStep, goView, VIEW_ORDER, syncLinks, runAnalysis, writeScript, buildVoice, exportWebM, drawFrame, drawPreview,
     totalDuration, previewTimeline, suggestTitles, pickTitle, makeThumbBlob, downloadThumb,
     buildHubTexts, renderHub, savePreset, loadPreset, renderKeys, renderHistory, saveCoupang,
     addFiles, addHistoryFromProduct, togglePreview, stopPlayback, synthSpeechBuffer, bgmBuffer,
     disclosureText, autoLink, coupangLink, fillSampleLinks, isDemo: () => state.demo || !realKeys().length,
+    // 새 화면·도구
+    renderHooks, applyHook, renderVoiceNames, applyGap, gapLabel,
+    renderPerf, logActivity, renderAccounts, loginCount,
+    renderFamous, drawFamousFrame, drawFamousPreview, famousDur, famousConfig, famousConfigText, famousSlot,
+    famousCandidates, exportFamousWebM, toggleFamousPlay, stopFamousPlay, recordClip,
+    renderMulti, setMulti, multiCommand, parseMultiLinks,
+    renderEraserOptions, syncEraserInputs, drawEraserFrame, drawEraserPreview, exportEraserWebM,
     setTime: t => { PV.t = clamp(t, 0, totalDuration()); drawPreview(); },
+    setFamousTime: t => { FAMOUS.t = clamp(t, 0, famousDur()); drawFamousPreview(); },
+    famousNow: () => FAMOUS.t,
     now: () => PV.t
   };
 })();

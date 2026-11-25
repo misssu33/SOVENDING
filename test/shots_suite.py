@@ -1,9 +1,9 @@
 """쇼츠자판기 — 배포용 스크린샷 생성.
 
-데모 데이터(업로드 영상 없이 자동 생성 장면)로 0~6단계 화면을 캡처한다.
+데모 데이터(업로드 영상 없이 자동 생성 장면)로 내 성과·1~6단계·도구 화면을 캡처한다.
   python3 test/shots_suite.py
 """
-import os, threading, functools, http.server, socketserver, pathlib
+import os, shutil, threading, functools, http.server, socketserver, pathlib
 os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', '/workspace/.pw/browsers')
 os.environ.setdefault('LD_LIBRARY_PATH', '/workspace/.pw/libs')
 from playwright.sync_api import sync_playwright
@@ -42,6 +42,8 @@ with sync_playwright() as p:
     pg.goto(BASE + 'index.html', wait_until='load')
     pg.wait_for_timeout(500)
 
+    pg.evaluate('SV.goView("perf")')
+    pg.wait_for_timeout(300)
     pg.screenshot(path=str(SHOTS / '01-step0-desktop.png'))
     build_demo(pg)
 
@@ -55,10 +57,16 @@ with sync_playwright() as p:
     pg.wait_for_timeout(400)
     pg.screenshot(path=str(SHOTS / '03-step2-desktop.png'))
 
-    # step 3
+    # step 3 — 후킹 칩 · 구글 목소리 · 문장 사이 간격
     pg.evaluate('SV.goStep(3)')
     pg.wait_for_timeout(400)
     pg.screenshot(path=str(SHOTS / '04-step3-desktop.png'))
+    pg.evaluate("() => { const el=document.querySelector('#gapSel'); el.value='0.3'; el.dispatchEvent(new Event('change',{bubbles:true})); }")
+    pg.wait_for_timeout(300)
+    pg.evaluate('window.scrollTo(0, 240)')
+    pg.wait_for_timeout(200)
+    pg.screenshot(path=str(SHOTS / '04b-step3-hooks.png'))
+    pg.evaluate('window.scrollTo(0, 0)')
 
     # step 4 — 메인 배포 이미지
     pg.evaluate('SV.goStep(4)')
@@ -69,7 +77,7 @@ with sync_playwright() as p:
     pg.wait_for_timeout(600)
     pg.evaluate('window.scrollTo(0,0)')
     pg.wait_for_timeout(300)
-    pg.screenshot(path=str(ROOT / 'preview-vending.png'))
+    pg.screenshot(path=str(SHOTS / '04c-step4-hero.png'))
 
     # step 5
     pg.evaluate('SV.goStep(5)')
@@ -87,10 +95,28 @@ with sync_playwright() as p:
     pg.wait_for_timeout(400)
     pg.screenshot(path=str(SHOTS / '06-step6-desktop.png'))
 
-    # step 7
+    # 쿠팡파트너스
     pg.evaluate('SV.goStep(7)')
     pg.wait_for_timeout(400)
     pg.screenshot(path=str(SHOTS / '07-step7-desktop.png'))
+
+    # 도구 · 🔥 유명 쇼츠
+    pg.evaluate('SV.goView("famous")')
+    pg.evaluate("""() => { const el=document.querySelector('#famousLayout'); el.value='banded'; el.dispatchEvent(new Event('change',{bubbles:true}));
+      const cap=document.querySelector('#famousCaption'); cap.value='링크는 고정댓글에 있어요'; cap.dispatchEvent(new Event('input',{bubbles:true})); }""")
+    pg.wait_for_timeout(400)
+    pg.evaluate('window.scrollTo(0,0)')
+    pg.wait_for_timeout(300)
+    pg.screenshot(path=str(SHOTS / '08-famous-desktop.png'))
+    shutil.copyfile(SHOTS / '08-famous-desktop.png', ROOT / 'preview-vending.png')
+
+    # 도구 · 자막 지우개
+    pg.evaluate('SV.goView("eraser")')
+    pg.wait_for_timeout(400)
+    pg.screenshot(path=str(SHOTS / '09-eraser-desktop.png'))
+    pg.evaluate('SV.goView("multi")')
+    pg.wait_for_timeout(300)
+    pg.screenshot(path=str(SHOTS / '09b-multi-desktop.png'))
 
     # 모바일
     mp = ctx.new_page()
@@ -106,6 +132,13 @@ with sync_playwright() as p:
     mp.evaluate('SV.goStep(3)')
     mp.wait_for_timeout(300)
     mp.screenshot(path=str(SHOTS / '11-mobile-step3.png'))
+    mp.evaluate('SV.goView("perf")')
+    mp.wait_for_timeout(300)
+    mp.screenshot(path=str(SHOTS / '13-mobile-perf.png'))
+    mp.evaluate('SV.goView("famous")')
+    mp.wait_for_timeout(300)
+    mp.screenshot(path=str(SHOTS / '14-mobile-famous.png'))
+    shutil.copyfile(SHOTS / '14-mobile-famous.png', ROOT / 'preview-vending-mobile.png')
     mp.evaluate('SV.goStep(1)')
     mp.wait_for_timeout(300)
     mp.screenshot(path=str(SHOTS / '12-mobile-step1.png'))
