@@ -1646,6 +1646,87 @@ with sync_playwright() as p:
     check(state(pg, 'SV.state.step') == 4, '모바일 이전 버튼')
 
     # =========================================================
+    # =========================================================
+    section('13. 대본 유형 · 8종 프롬프트(탑티어 무지개 표시)')
+    goto_step(pg, 3)
+    pg.wait_for_timeout(300)
+    chips = pg.eval_on_selector_all('#typeChips .type-chip', 'e=>e.map(x=>({id:x.dataset.type,top:x.classList.contains("top"),txt:x.innerText}))')
+    check(len(chips) == 7, '대본 유형 7종 칩', len(chips))
+    tops = [c['id'] for c in chips if c['top']]
+    check(sorted(tops) == ['cmp', 'loop', 'r1', 'season'], '탑티어 유형 4종에만 무지개 표시', tops)
+    check(all('🌈' in c['txt'] for c in chips if c['top']), '탑티어 칩에 🌈 배지', [c['txt'][:12] for c in chips if c['top']][:2])
+    check(all('🌈' not in c['txt'] for c in chips if not c['top']), '일반 유형(3-2·7·기본)에는 무지개 없음', [c['id'] for c in chips if not c['top']])
+    rb = pg.evaluate("""() => { const el=document.querySelector('#typeChips .type-chip.top');
+      const cs=getComputedStyle(el); return {img:cs.backgroundImage.slice(0,40), clip:cs.backgroundClip, border:cs.borderTopWidth}; }""")
+    check('gradient' in rb['img'], '탑티어 칩에 무지개 그라데이션 테두리', rb)
+    check(pg.eval_on_selector_all('.recipe-tools .rainbow', 'e=>e.length') == 2, '후킹 5종·피드백 수정 버튼 무지개', pg.eval_on_selector_all('.recipe-tools .rainbow', 'e=>e.map(x=>x.id)'))
+
+    # 유형 선택 → 그 유형 구조로 데모 대본
+    pg.evaluate("() => SV.renderTypeChips()")
+    pg.click('#typeChips [data-type="loop"]')
+    pg.wait_for_timeout(200)
+    check(state(pg, 'SV.state.scriptOpts.type') == 'loop', '유형 선택 반영', state(pg, 'SV.state.scriptOpts.type'))
+    pg.click('#btnWriteScript')
+    pg.wait_for_timeout(900)
+    check(state(pg, 'SV.state.script.script_type') == 'loop', '선택한 유형으로 대본 생성', state(pg, 'SV.state.script.script_type'))
+    loop_sents = state(pg, 'SV.state.script.sentences.map(s=>s.text)')
+    check(len(loop_sents) <= 5 and loop_sents[0] == loop_sents[-1], '초단편 루프: 4~5문장·첫=끝(루프)', loop_sents)
+
+    # 후킹 5종
+    pg.click('#btnHooks5')
+    pg.wait_for_timeout(700)
+    h5 = state(pg, 'SV.state.hooks5')
+    check(len(h5['hooks']) == 5, '후킹 5종 생성', [(x['type'], x['text']) for x in h5['hooks']])
+    check(all(len(x['text']) <= 24 for x in h5['hooks']), '훅 24자 이내', [len(x['text']) for x in h5['hooks']])
+    banned_hit = [w for x in h5['hooks'] for w in ['필수템', '강추', '인생템'] if w in x['text']]
+    check(not banned_hit, "금지 표현('필수템·강추·인생템') 없음", banned_hit)
+    check(sorted(x['type'] for x in h5['hooks']) == sorted(['호기심', '공감', '반전', '질문', '숫자']), '5유형 각 1개', [x['type'] for x in h5['hooks']])
+    check(pg.eval_on_selector('#recipeBox .recipe-card', 'e=>e.classList.contains("rainbow")'), '후킹 5종 카드 무지개 테두리')
+    check(pg.eval_on_selector_all('#recipeBox [data-hook5]', 'e=>e.length') == 5, '훅마다 「첫 문장으로」 버튼')
+    pg.click('#recipeBox [data-hook5="1"]')
+    pg.wait_for_timeout(300)
+    check(state(pg, 'SV.state.script.sentences[0].text') == h5['hooks'][1]['text'], '훅을 첫 문장으로 적용')
+
+    # 댓글 유도 1줄
+    before_n = state(pg, 'SV.state.script.sentences.length')
+    pg.click('#btnComment')
+    pg.wait_for_timeout(700)
+    cc = state(pg, 'SV.state.commentCands')
+    check(len(cc['questions']) == 3 and cc['closing'], '댓글 유도 질문 3개', [q['type'] for q in cc['questions']])
+    pg.click('#recipeBox [data-close="0"]')
+    pg.wait_for_timeout(300)
+    after = state(pg, 'SV.state.script.sentences.map(s=>s.text)')
+    check(len(after) >= before_n and after[-1] == cc['questions'][0]['text'], '댓글 유도 문장을 마지막에 붙임', after[-1][:24])
+
+    # 랜덤 소재 9개
+    pg.click('#btnMaterials')
+    pg.wait_for_timeout(700)
+    mat = state(pg, 'SV.state.materials')
+    check(len(mat['groups']) == 3 and sum(len(g['examples']) for g in mat['groups']) == 9, '랜덤 소재 3군 × 3예시 = 9개', [g['name'] for g in mat['groups']])
+    check(mat['target'] and mat['category'], '타깃·분야 표시', [mat['target'], mat['category']])
+    check(pg.eval_on_selector_all('#recipeBox .recipe-card .tag', 'e=>e.length') == 9, '소재 9개 화면 표시')
+
+    # 수치 피드백
+    pg.click('#btnRevise')
+    pg.wait_for_timeout(300)
+    pg.fill('#rv_views', '1000'); pg.fill('#rv_likes', '12'); pg.fill('#rv_comments', '1'); pg.fill('#rv_clicks', '3')
+    pg.click('#btnReviseGo')
+    pg.wait_for_timeout(800)
+    rv = state(pg, 'SV.state.revise')
+    check(len(rv['versions']) == 2, '피드백 수정안 2개', [v['title'] for v in rv['versions']])
+    check(rv['issues'] and rv['disclosure'], '지적 사항·고지 문구 포함', rv['issues'][:1])
+    check(pg.eval_on_selector_all('#recipeBox [data-ver]', 'e=>e.length') == 2, '수정안마다 적용 버튼')
+    pg.click('#recipeBox [data-ver="0"]')
+    pg.wait_for_timeout(300)
+    check(state(pg, 'SV.state.script.sentences.length') == len(rv['versions'][0]['sentences']), '수정안을 대본에 적용')
+
+    # 댓글 유도 체크박스 + 기본 유형 복귀
+    pg.check('#commentLineChk')
+    check(state(pg, 'SV.state.scriptOpts.comment') is True, '댓글 유도 1줄 옵션 켜기')
+    pg.click('#typeChips [data-type="base"]')
+    pg.wait_for_timeout(150)
+    check(state(pg, 'SV.state.scriptOpts.type') == 'base', '기본 유형으로 복귀')
+
     section('12. 새로고침 후 저장 유지')
     pg.set_viewport_size({'width': 1440, 'height': 900})
     pg.reload(wait_until='load')

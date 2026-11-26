@@ -300,6 +300,18 @@
             <span class="hint" id="scriptStatus">아직 대본이 없습니다. 「AI 대본 쓰기」를 눌러 주세요.</span>
             <button class="btn primary" type="button" id="btnWriteScript">🪄 AI 대본 쓰기</button>
           </div>
+          <div class="field" style="margin-top:10px">
+            <span>대본 유형 <em class="rainbow-legend">🌈 탑티어가 자주 쓰는 유형</em></span>
+            <div class="type-chips" id="typeChips"></div>
+          </div>
+          <label class="switch" style="margin:4px 0 8px"><input type="checkbox" id="commentLineChk"> <span>💬 댓글 유도 1줄 붙이기</span></label>
+          <div class="row recipe-tools">
+            <button class="btn xs ghost rainbow" type="button" id="btnHooks5" title="2번 프롬프트 · 5유형 훅">🌈 후킹 5종</button>
+            <button class="btn xs ghost" type="button" id="btnComment" title="4번 프롬프트 · 댓글 유도">💬 댓글 1줄</button>
+            <button class="btn xs ghost" type="button" id="btnMaterials" title="1번 프롬프트 · 랜덤 소재">🎲 랜덤 소재</button>
+            <button class="btn xs ghost rainbow" type="button" id="btnRevise" title="8번 프롬프트 · 수치 피드백">📊 피드백 수정</button>
+          </div>
+          <div id="recipeBox" class="stack hidden"></div>
         </div>
       </div>
 

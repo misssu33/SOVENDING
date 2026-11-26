@@ -810,3 +810,33 @@ pre.cmd{
   .trend-table{min-width:600px}
   .trend-table .t-title,.trend-table .t-sub{max-width:170px}
 }
+
+/* ---- 대본 유형 · 탑티어(무지개) 표시 ---- */
+@keyframes rbSweep{0%{background-position:0% 50%}100%{background-position:300% 50%}}
+.rainbow-legend{font-style:normal;font-weight:800;font-size:10.5px;padding:2px 8px;border-radius:999px;color:#12080f;
+  background-image:linear-gradient(90deg,#ff5d8f,#ffb648,#ffe66b,#48e08a,#4cc9ff,#b477ff,#ff5d8f);
+  background-size:100% 100%}
+.type-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.type-chip{background:#0d151f;border:1.5px solid var(--line);border-radius:11px;padding:7px 10px;font-size:11.5px;
+  font-weight:700;color:#cbd6e4;display:inline-flex;align-items:center;gap:6px;transition:.15s;cursor:pointer}
+.type-chip:hover{border-color:#3a4d66;color:#fff}
+.type-chip.on{border-color:#8aa4c4;box-shadow:0 0 0 2px rgba(138,164,196,.18);color:#fff}
+.type-chip .tt{font-size:9.5px;font-weight:900;padding:1px 6px;border-radius:999px;color:#12080f;
+  background-image:linear-gradient(90deg,#ff5d8f,#ffb648,#ffe66b,#48e08a,#4cc9ff,#b477ff,#ff5d8f);
+  background-size:100% 100%}
+.type-chip.top{border:2px solid transparent;background-image:linear-gradient(#0d151f,#0d151f),
+  linear-gradient(90deg,#ff5d8f,#ffb648,#ffe66b,#48e08a,#4cc9ff,#b477ff);background-origin:border-box;
+  background-clip:padding-box,border-box;background-size:100% 100%,100% 100%}
+.type-chip.top.on{background-image:linear-gradient(#1a1024,#1a1024),
+  linear-gradient(90deg,#ff5d8f,#ffb648,#ffe66b,#48e08a,#4cc9ff,#b477ff);color:#fff}
+.btn.rainbow,.btn.xs.rainbow{border:2px solid transparent;background-image:linear-gradient(#0d151f,#0d151f),
+  linear-gradient(90deg,#ff5d8f,#ffb648,#ffe66b,#48e08a,#4cc9ff,#b477ff);background-origin:border-box;
+  background-clip:padding-box,border-box;background-size:100% 100%,100% 100%;font-weight:800}
+.recipe-tools{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.recipe-card{background:#0b121a;border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.recipe-card.rainbow{border:2px solid transparent;background-image:linear-gradient(#0b121a,#0b121a),
+  linear-gradient(90deg,#ff5d8f,#ffb648,#ffe66b,#48e08a,#4cc9ff,#b477ff);background-origin:border-box;
+  background-clip:padding-box,border-box;background-size:100% 100%,100% 100%}
+.recipe-card .card-head{margin-bottom:8px}
+.recipe-card h3{font-size:12.5px;font-weight:800}
+.recipe-card .card.inner{padding:10px;margin-top:6px}

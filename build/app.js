@@ -1014,22 +1014,364 @@
     return { lang, tone, length, titles, highlights: highlights.filter(Boolean), hooks, sentences: sents.map(text => ({ text })), demo: true };
   }
 
+  /* ---------------- 대본 유형 · 8종 프롬프트(쿠팡파트너스 무한 소재) ---------------- */
+  const SCRIPT_TYPES = [
+    { id: 'base', label: '기본 자유형', hint: '지금까지 쓰던 자유 구성', order: '첫 문장 훅 → 핵심 장점 2~3개 → 확인 안내', chars: 170, sentences: 5 },
+    { id: 'r1', label: '3-1 실사용 후기형', hint: '고민 → 달라진 점 → 단점 1개 → 확인', order: '고민 → 달라진 점 → 아쉬운 점 1개 → 확인 안내', chars: 160, sentences: 5 },
+    { id: 'r2', label: '3-2 구매후기 요약형', hint: '구매후기 요약 · 단점 포함', order: "훅 → 반복 장점 2~3개 → 단점 1~2개 → '이런 사람에게 맞음/안 맞음' → 확인 안내", chars: 170, sentences: 6 },
+    { id: 'cmp', label: '5 공정 비교형 (A vs B)', hint: 'A·B 장단점 → 대상 구분', order: "훅 → A 장단점 2개씩 → B 장단점 2개씩 → '이런 사람은 A, 이런 사람은 B' → 확인 안내", chars: 180, sentences: 7 },
+    { id: 'season', label: '6 시즌·생활장면형', hint: '장면 → 불편 → 해결 → 질문', order: '생활 장면 → 그때 생기는 불편 → 제품이 해결하는 점 → 질문 한 줄', chars: 160, sentences: 5 },
+    { id: 'bundle', label: '7 5종 묶음 큐레이션형', hint: '한 테마 5개 묶음', order: "훅 → 번호 리스트 1~5(상품마다 '이럴 때 쓰는 물건' 한 줄) → 마무리", chars: 200, sentences: 7 },
+    { id: 'loop', label: '⚡ 초단편 루프 (6~15초)', hint: '6~15초 · 탑티어 루프', order: '0~2초 훅 → 손 시연 컷 1~2문장 → 단점 1줄 → 무언 CTA(루프로 다시 시작)', chars: 90, sentences: 4 }
+  ];
+  const TOP_TIER_TYPES = ['r1', 'cmp', 'season', 'loop'];   // 탑티어 크리에이터가 자주 쓰는 유형(무지개 표시)
+  const TYPE_RULES = {
+    base: [],
+    r1: ['내가 직접 써본 것처럼 쓰되, 제품 정보에 없는 수치·효과는 지어내지 않는다', '아쉬운 점(현실 단점)을 반드시 1개 넣는다'],
+    r2: ["나는 아직 안 써봤다. '구매후기 읽어보니' 형식으로 말한다", "'써보니' 같은 직접 사용 표현 금지", '후기에 없는 내용·수치 금지, 단점을 반드시 1개 이상'],
+    cmp: ['한쪽만 띄우지 않는다(양쪽 장단점을 같은 개수로)', '제품 정보에 없는 수치는 지어내지 않는다'],
+    season: ["'시즌 필수템 / 지금 꼭 사세요' 같은 억지 연결 금지", '안 써봤으면 써본 척 금지', '마지막은 질문 한 줄로 끝낸다'],
+    bundle: ['제품 정보에 준 특징 외 효과는 지어내지 않는다', "번호를 소리 내어 읽어도 자연스럽게('하나, 둘' 형태 허용)"],
+    loop: ['문장은 8~22자로 아주 짧게, 4문장 이내(6~15초 분량)', '마지막 문장은 첫 문장으로 자연스럽게 이어지게(루프)', "말로 '구독·좋아요'를 요청하지 않는다(무언 CTA)"]
+  };
+  const HOOK5_TYPES = ['호기심', '공감', '반전', '질문', '숫자'];
+  const HOOK_BANNED = ['필수템', '강추', '인생템', '꼭 사세요'];
+  const TYPE_DEMO = {
+    r1: ['사기 전에 제일 걱정했던 게 {worry} 문제였어요.', '며칠 써보니 {good1} 부분이 생각보다 확실했어요.',
+         '다만 {bad}은 미리 알고 사는 게 좋아요.', '그래도 {good2} 덕분에 계속 쓰고 있어요.',
+         '자세한 건 설명란에 적어뒀으니 확인해 보세요.'],
+    r2: ['구매후기 읽어보니 결론이 갈리는 제품이에요.', '반복해서 나온 장점은 {good1}, {good2}이라는 점이었어요.',
+         '단점으로는 {bad} 얘기가 많았어요.', '정리하면 이래서 사고, 이래서 말리는 물건이에요.',
+         '내 상황과 맞는지 한 번 더 보고 결정하세요.', '구매후기 모아둔 링크는 설명란에 있어요.'],
+    cmp: ['비슷해 보이는데 값이 다른 두 제품, 뭐가 다를까요?', 'A는 {good1}이 좋고, {bad}이 아쉬워요.',
+          'B는 {good2}이 편하고, {bad2}이 걸려요.', '매일 쓰면 A, 가끔 쓰면 B가 맞아요.',
+          '둘 다 장단점이 분명한 제품이에요.', '정리한 표는 설명란에 올려뒀어요.', '본인 생활에 맞는 쪽을 고르세요.'],
+    season: ['이맘때만 되면 {scene}에서 늘 같은 불편이 생겨요.', '그럴 때마다 {pain} 때문에 번거롭죠.',
+             '이 제품은 그 부분을 조금 덜어줘요.', '특히 {good1} 부분이 마음에 들었어요.',
+             '여러분은 이 상황, 어떻게 해결하고 계세요?'],
+    bundle: ['한 테마로 묶어봤습니다, 다섯 개만 보세요.', '하나, 매일 아침 쓰는 물건이에요.',
+             '둘, 좁은 공간에 두기 좋은 쪽이에요.', '셋, 관리할 때 하나 있으면 편해요.',
+             '넷, 선물해도 무난한 물건이에요.', '다섯, 가격 부담이 적은 걸로 골랐어요.', '필요한 것만 골라서 보세요.'],
+    loop: ['{worry} 때문에 샀어요.', '한 번 써보니 {good1}.', '단점은 {bad}, 감안하세요.', '{worry} 때문에 샀어요.']
+  };
+  const TYPE_TITLES = {
+    r1: ['사고 전에 단점부터', '솔직하게 정리'],
+    r2: ['구매후기 정리', '결론 갈리는 이유'],
+    cmp: ['A vs B 비교', '뭐가 다를까'],
+    season: ['이맘때 쓰는 이유', '생활 장면'],
+    bundle: ['한 테마 5종', '골라 담기'],
+    loop: ['6초 요약', '한 번에 보기']
+  };
+  const TARGETS = ['30대 자취 직장인', '4인 가족 주부', '초보 운전자', '1인 가구 사회초년생', '반려동물과 사는 20대', '아이 키우는 맞벌이 부부'];
+  const CATEGORIES = ['생활용품', '주방', '차량용품', '청소·정리', '계절가전', '반려동물', '캠핑·아웃도어', '수납·정리'];
+  const MATERIAL_IDEAS = {
+    '생활용품': [['욕실 습기', '욕실 선반·환풍기 커버'], ['먼지·털', '돌돌이·먼지 제거'], ['빨래', '건조대·빨래 집게']],
+    '주방': [['조리 도구', '실리콘 조리도구·밀폐용기'], ['설거지', '수세미·싱크대 정리'], ['보관', '양념통·냉장고 정리']],
+    '차량용품': [['실내 청소', '차량용 청소기·틈새 브러시'], ['수납', '트렁크 정리함·선글라스 홀더'], ['관리', '광택제·워셔액']],
+    '청소·정리': [['바닥', '밀대·물걸레'], ['정리', '서랍 칸막이·케이블 정리'], ['냄새', '탈취제·제습']],
+    '계절가전': [['습도', '가습기·제습기'], ['온도', '온풍기·핫팩'], ['공기', '공기청정·환기']],
+    '반려동물': [['급식', '자동 급식기·식기'], ['위생', '배변패드·탈취'], ['이동', '이동장·하네스']],
+    '캠핑·아웃도어': [['설치', '접이식 테이블·체어'], ['수납', '수납 박스·카트'], ['조명', '랜턴·스트링 조명']],
+    '수납·정리': [['좁은 공간', '선반·행거'], ['서랍', '칸막이·정리함'], ['주방', '회전 트레이·걸이']]
+  };
+  const BAD_POOL = ['물 보충이 잦은 점', '색상 선택이 좁은 점', '설명서가 간단한 점', '무게가 살짝 나가는 점'];
+
+  function typeMeta(id) { return SCRIPT_TYPES.find(t => t.id === id) || SCRIPT_TYPES[0]; }
+  function isTopType(id) { return TOP_TIER_TYPES.includes(id); }
+
+  function renderTypeChips() {
+    const box = $('#typeChips'); if (!box) return;
+    const cur = (state.scriptOpts && state.scriptOpts.type) || 'base';
+    box.innerHTML = SCRIPT_TYPES.map(t => {
+      const top = isTopType(t.id);
+      return '<button type="button" class="type-chip' + (top ? ' top' : '') + (cur === t.id ? ' on' : '') +
+        '" data-type="' + t.id + '" title="' + esc(t.order) + '">' +
+        (top ? '<span class="tt">🌈 탑티어</span>' : '') + esc(t.label) + '</button>';
+    }).join('');
+  }
+
+  function demoTemplate(type, p) {
+    const h = ((p && p.hooks) || []).filter(Boolean);
+    const map = { worry: '물통 크기', good1: h[0] || '쓰기 편한 점', good2: h[1] || '관리가 쉬운 점',
+                  bad: BAD_POOL[0], bad2: BAD_POOL[1], scene: '아침 준비', pain: '정리와 청소' };
+    return (TYPE_DEMO[type] || TYPE_DEMO.r1).map(l => l.replace(/\{(\w+)\}/g, (m, k) => map[k] || m));
+  }
+
+  function demoScriptByType(p, type, lang, tone, length, commentLine) {
+    const meta = typeMeta(type);
+    if (meta.id === 'base') {
+      const out = demoScript(p, lang, tone, length);
+      out.script_type = 'base';
+      if (commentLine) out.comment_line = demoComment(p).closing;
+      return out;
+    }
+    const name = shortName((p && p.name) || '제품');
+    const lines = demoTemplate(meta.id, p);
+    const n = Math.min(Math.max(4, LEN_COUNT[length] || 5), lines.length);
+    const sents = lines.slice(0, n);
+    const hooks5 = demoHooks5(p).hooks.map(h => h.text);
+    const out = {
+      lang, tone, length, titles: [name, TYPE_TITLES[meta.id][0]].map(t => String(t).slice(0, 22)),
+      highlights: [name.split(' ')[0], '단점'].filter(Boolean),
+      hooks: hooks5.concat(sents[0]).slice(0, 6),
+      sentences: sents.map(text => ({ text })), demo: true, script_type: meta.id
+    };
+    if (commentLine) out.comment_line = demoComment(p).closing;
+    return out;
+  }
+
+  function demoHooks5(p) {
+    const name = (p && p.name) || '이 제품';
+    const hooks = [
+      { type: '호기심', text: '이거 왜 다들 하나만 사는 걸까요?', reason: '이유가 궁금해서 멈춘다' },
+      { type: '공감', text: '매번 같은 불편, 저만 그런 거 아니죠?', reason: '내 얘기 같아서 멈춘다' },
+      { type: '반전', text: '비싼 게 답이 아니었어요.', reason: '예상이 뒤집혀서 본다' },
+      { type: '질문', text: '그거 하루면 충분할까요?', reason: '답을 확인하려고 본다' },
+      { type: '숫자', text: '3일 써보고 남은 결론 하나.', reason: '숫자가 구체적이라 신뢰가 간다' }
+    ];
+    return { hooks, best: hooks[0].text, demo: true };
+  }
+
+  function hookRule(type, text) {
+    const t = String(text || '').trim();
+    if (!t) return '빈 문장';
+    if (t.length > 24) return '24자 초과';
+    if (HOOK_BANNED.some(w => t.includes(w))) return '금지 표현';
+    return '';
+  }
+
+  function demoComment(p) {
+    const q = [
+      { type: '공감', text: '저도 이거 살까 말까 고민했는데, 다들 어느 쪽이세요?' },
+      { type: '반박', text: '이 가격이면 그냥 다른 거 사는 게 낫다는 분도 있겠죠?' },
+      { type: '경험 공유', text: '써보신 분은 단점이 뭐였는지 알려주세요.' }
+    ];
+    return { questions: q, closing: q[0].text, demo: true };
+  }
+
+  function demoMaterials(target, category) {
+    const tgt = target || TARGETS[Math.floor(Math.random() * TARGETS.length)];
+    const cat = category || CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+    const ideas = MATERIAL_IDEAS[cat] || MATERIAL_IDEAS['생활용품'];
+    const groups = ideas.map(([title, ex]) => ({
+      name: title, examples: [ex + ' 기본형', ex + ' 대용량', ex + ' 선물 세트'],
+      point: "'" + title + "' 문제를 15초 안에 1컷으로 보여줄 수 있음 (타깃: " + tgt + ")",
+      price: ['1만 원대', '2~3만 원대', '3~5만 원대'][Math.floor(Math.random() * 3)]
+    }));
+    return {
+      demo: true, target: tgt, category: cat, groups,
+      avoid: [{ type: '효능·건강 과장 제품', why: '플랫폼·공정위 규정 위반 위험' },
+              { type: '브랜드 로고가 크게 보이는 제품', why: '타 브랜드 홍보로 보임' },
+              { type: '설치·시공이 필요한 제품', why: '15초 영상으로 설명이 안 됨' }],
+      table: groups.map((g, i) => ({ name: g.name, impulse: i === 0 ? '상' : '중', material: '상', together: i === 2 ? '하' : '중' }))
+    };
+  }
+
+  function demoRevise(script, metrics) {
+    const sents = ((script && script.sentences) || []).map(s => s.text);
+    const views = Number(metrics.views) || 0, likes = Number(metrics.likes) || 0, clicks = Number(metrics.clicks) || 0;
+    const rate = views ? likes / views * 100 : 0, ctr = views ? clicks / views * 100 : 0;
+    const issues = [];
+    if (rate && rate < 3) issues.push('첫 문장이 약합니다. 좋아요율이 낮아 초반 이탈이 큰 것으로 보입니다.');
+    if (ctr && ctr < 1) issues.push('마지막 확인 안내가 약합니다. 링크 클릭이 낮습니다.');
+    if (!issues.length) issues.push('문장 길이가 고른 편입니다. 단점 문장을 조금 더 앞으로 옮겨 보세요.');
+    return {
+      demo: true, issues,
+      dropAt: { seconds: Math.max(2, Math.round(sents.length * 1.2)), sentence: 2, why: '설명 문장이 이어지는 구간' },
+      versions: [{ title: '수정안 1 · 첫 문장 교체', sentences: sents.slice(0, 6) },
+                 { title: '수정안 2 · 단점 앞당김', sentences: sents.slice(0, 6).reverse() }],
+      disclosure: '쿠팡 파트너스 활동의 일환으로 수수료를 받을 수 있습니다'
+    };
+  }
+
+  async function geminiHooks5() {
+    const p = state.product || {};
+    const prompt = [
+      '너는 숏폼 카피라이터다.',
+      '상품: ' + (p.name || '제품') + ' / 핵심 스펙: ' + ((p.hooks || []).slice(0, 3).join(', ') || p.summary || '') + ' / 가격대: ' + (p.price || '미확인'),
+      '타깃: ' + (p.target || '20~40대 쇼핑 관심층'),
+      '스크롤을 멈추게 하는 첫 문장 5개를 호기심형/공감형/반전형/질문형/숫자형으로 하나씩 써라.',
+      '상품명·가격은 넣지 말고 24자 이내, 필수템·강추·인생템 금지. 각 훅 옆에 멈추게 되는 이유 한 줄.',
+      'JSON: {"hooks":[{"type":"호기심","text":"...","reason":"..."}],"best":"..."} — hooks 5개 고정'
+    ].join('\n');
+    const raw = await geminiJSON(prompt, { temp: 1.0, maxTokens: 900 });
+    const hooks = (raw.hooks || []).map(h => typeof h === 'string' ? { text: h } : h)
+      .map(h => ({ type: HOOK5_TYPES.includes(h.type) ? h.type : '호기심', text: String(h.text || '').trim(), reason: String(h.reason || '').slice(0, 60) }))
+      .filter(h => h.text && !hookRule(h.type, h.text)).slice(0, 5);
+    while (hooks.length < 5) { const f = demoHooks5(p).hooks[hooks.length]; if (!hooks.some(h => h.text === f.text)) hooks.push(f); else break; }
+    const best = hooks.some(h => h.text === raw.best) ? raw.best : (hooks[0] || {}).text || '';
+    return { hooks: hooks.slice(0, 5), best, demo: false };
+  }
+
+  async function geminiComment() {
+    const p = state.product || {};
+    const prompt = [
+      '너는 숏폼 참여 유도 전략가다. 주제: ' + (p.name || '생활용품'),
+      '댓글 달고 싶게 만드는 질문 3개를 공감형/반박형/경험 공유형으로 써라.',
+      "'댓글 달아주세요' 같은 직접 요청 없이 친구한테 묻듯이. 그중 하나로 끝나는 마지막 1~2문장도 함께.",
+      'JSON: {"questions":[{"type":"공감","text":"..."}],"closing":"..."}'
+    ].join('\n');
+    const raw = await geminiJSON(prompt, { temp: 0.95, maxTokens: 700 });
+    const qs = (raw.questions || []).slice(0, 3).map(q => typeof q === 'string' ? { type: '공감', text: q } : q)
+      .map(q => ({ type: String(q.type || '공감'), text: String(q.text || '').slice(0, 80) })).filter(q => q.text);
+    if (!qs.length) return demoComment(p);
+    return { questions: qs, closing: String(raw.closing || qs[0].text).slice(0, 80), demo: false };
+  }
+
+  async function geminiMaterials() {
+    const target = TARGETS[Math.floor(Math.random() * TARGETS.length)];
+    const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+    const prompt = [
+      '너는 숏폼 제휴마케팅 전문가다. 타깃: ' + target + ' / 분야: ' + category,
+      '1) 이 타깃이 15~20초 영상을 보고 바로 클릭할 상품군 3개, 상품 예시 3개씩',
+      '2) 상품군별 소구 포인트 1줄과 예상 가격대 3) 숏폼에서 피해야 할 상품 유형 3개와 이유',
+      '수치는 지어내지 말고 1,000자 이내. JSON: {"groups":[{"name":"","examples":["","",""],"point":"","price":""}],"avoid":[{"type":"","why":""}]}',
+      '타깃과 분야는 반드시 ' + target + ' / ' + category + ' 로 고정.'
+    ].join('\n');
+    const raw = await geminiJSON(prompt, { temp: 1.0, maxTokens: 1200 });
+    const groups = (raw.groups || []).slice(0, 3).map(g => ({
+      name: String(g.name || '').slice(0, 30), examples: (g.examples || []).slice(0, 3).map(String),
+      point: String(g.point || '').slice(0, 80), price: String(g.price || '').slice(0, 20)
+    })).filter(g => g.name && g.examples.length);
+    if (groups.length < 3) return demoMaterials(target, category);
+    return { target, category, groups, avoid: (raw.avoid || []).slice(0, 3), table: (raw.table || []).slice(0, 3), demo: false };
+  }
+
+  async function geminiRevise(script, metrics) {
+    const lines = ((script && script.sentences) || []).map((s, i) => (i + 1) + '. ' + s.text).join('\n');
+    const prompt = [
+      '너는 숏폼 콘텐츠 분석가다.',
+      '[기존 대본]\n' + lines,
+      '[반응] 조회 ' + (metrics.views || 0) + ' / 좋아요 ' + (metrics.likes || 0) + ' / 댓글 ' + (metrics.comments || 0) + ' / 링크 클릭 ' + (metrics.clicks || 0),
+      '1) 광고 같거나 지루한 문장을 짚어라 2) 몇 초·어느 문장에서 이탈했을지 추정하라',
+      '3) 160자 이내 수정 대본 2개 4) 대가성 고지 문구가 빠졌으면 지적하고 넣어라',
+      'JSON: {"issues":[""],"dropAt":{"seconds":8,"sentence":2,"why":""},"versions":[{"title":"","sentences":[""]}],"disclosure":""}'
+    ].join('\n');
+    const raw = await geminiJSON(prompt, { temp: 0.9, maxTokens: 1400 });
+    const versions = (raw.versions || []).slice(0, 2).map((v, i) => ({
+      title: String(v.title || ('수정안 ' + (i + 1))).slice(0, 40),
+      sentences: (v.sentences || []).map(String).filter(Boolean).slice(0, 8)
+    })).filter(v => v.sentences.length);
+    if (!versions.length) return demoRevise(script, metrics);
+    return { issues: (raw.issues || []).slice(0, 4).map(String), dropAt: raw.dropAt || {},
+             versions, disclosure: String(raw.disclosure || ''), demo: false };
+  }
+
+  function recipeCard(title, note, rainbow) {
+    const box = $('#recipeBox'); if (!box) return null;
+    box.classList.remove('hidden');
+    box.innerHTML = '<div class="recipe-card' + (rainbow ? ' rainbow' : '') + '"><div class="card-head"><h3>' + title +
+      '</h3><span class="hint">' + (note || '') + '</span></div><div class="stack" id="recipeInner"></div></div>';
+    return $('#recipeInner');
+  }
+
+  async function runHooks5() {
+    if (!state.product) { toast('먼저 1~2단계에서 제품을 분석하세요', 'bad'); return; }
+    const inner = recipeCard('🌈 후킹 5종 (2번 프롬프트)', "24자 이내 · 상품명·가격 숨김 · '필수템·강추·인생템' 금지", true);
+    if (!inner) return;
+    inner.innerHTML = '<span class="hint">만드는 중…</span>';
+    const out = await withDemoFallback(geminiHooks5, () => demoHooks5(state.product), '후킹 5종');
+    state.hooks5 = out;
+    inner.innerHTML = out.hooks.map((h, i) =>
+      '<div class="row between" style="gap:10px;align-items:flex-start"><div><span class="badge">' + esc(h.type) + '</span> <b>' + esc(h.text) +
+      '</b><div class="hint">' + esc(h.reason || '') + ' · ' + String(h.text).length + '자</div></div>' +
+      '<button class="btn xs ghost" data-hook5="' + i + '">첫 문장으로</button></div>').join('') +
+      '<p class="hint">추천: <b>' + esc(out.best) + '</b>' + (out.demo ? ' · 데모' : ' · Gemini') + '</p>';
+  }
+
+  async function runComment() {
+    if (!state.product) { toast('먼저 1~2단계에서 제품을 분석하세요', 'bad'); return; }
+    const inner = recipeCard('💬 댓글 유도 1줄 (4번 프롬프트)', "직접 '댓글 달아주세요' 없이 묻듯이", false);
+    if (!inner) return;
+    inner.innerHTML = '<span class="hint">만드는 중…</span>';
+    const out = await withDemoFallback(geminiComment, () => demoComment(state.product), '댓글 유도');
+    state.commentCands = out;
+    inner.innerHTML = out.questions.map((q, i) =>
+      '<div class="row between" style="gap:10px"><div><span class="badge">' + esc(q.type) + '</span> ' + esc(q.text) + '</div>' +
+      '<button class="btn xs ghost" data-close="' + i + '">이 문장 붙이기</button></div>').join('') +
+      '<p class="hint">마무리: <b>' + esc(out.closing) + '</b>' + (out.demo ? ' · 데모' : ' · Gemini') + '</p>';
+  }
+
+  function appendSentence(text) {
+    if (!state.script) { toast('먼저 대본을 만들어 주세요', 'bad'); return; }
+    const sents = state.script.sentences.map(s => ({ text: s.text }));
+    sents.push({ text: String(text).slice(0, 90) });
+    state.script.sentences = sents.slice(0, 9);
+    state.voice = null;
+    renderScript(); renderTimeline(); buildScenes(); ensurePreview();
+    toast('마지막 문장으로 붙였습니다', 'good');
+  }
+
+  async function runMaterials() {
+    const inner = recipeCard('🎲 랜덤 소재 발굴 (1번 프롬프트)', '타깃 × 분야 → 상품군 3개 × 예시 3개 = 9개', false);
+    if (!inner) return;
+    inner.innerHTML = '<span class="hint">만드는 중…</span>';
+    const out = await withDemoFallback(geminiMaterials, () => demoMaterials(), '소재 발굴');
+    state.materials = out;
+    const groups = out.groups.map(g => '<div class="card inner" style="padding:10px"><h3>' + esc(g.name) + '</h3>' +
+      '<div class="hint">' + esc(g.point || '') + ' · ' + esc(g.price || '') + '</div>' +
+      '<div class="kw" style="margin-top:6px">' + g.examples.map(x => '<span class="tag">' + esc(x) + '</span>').join('') + '</div></div>').join('');
+    inner.innerHTML = '<p class="hint">타깃 <b>' + esc(out.target) + '</b> · 분야 <b>' + esc(out.category) + '</b>' + (out.demo ? ' · 데모' : ' · Gemini') + '</p>' +
+      groups + '<p class="hint">피할 유형: ' + (out.avoid || []).map(a => esc(a.type) + '(' + esc(a.why) + ')').join(' · ') + '</p>';
+  }
+
+  async function runRevise() {
+    if (!state.script) { toast('먼저 3단계에서 대본을 만들어 주세요', 'bad'); return; }
+    const inner = recipeCard('📊 수치 피드백 수정 (8번 프롬프트)', '조회·좋아요·댓글·클릭으로 이탈 구간을 짚고 수정안 2개', true);
+    if (!inner) return;
+    inner.innerHTML = '<div class="grid4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">' +
+      ['views|조회', 'likes|좋아요', 'comments|댓글', 'clicks|링크 클릭'].map(x => {
+        const [k, label] = x.split('|');
+        return '<label class="field"><span>' + label + '</span><input type="number" min="0" id="rv_' + k + '" value="0"></label>';
+      }).join('') + '</div><button class="btn primary" id="btnReviseGo">수치로 수정안 받기</button>';
+    const go = $('#btnReviseGo'); if (!go) return;
+    go.addEventListener('click', async () => {
+      const metrics = { views: +($('#rv_views') || {}).value || 0, likes: +($('#rv_likes') || {}).value || 0,
+                        comments: +($('#rv_comments') || {}).value || 0, clicks: +($('#rv_clicks') || {}).value || 0 };
+      const out = await withDemoFallback(() => geminiRevise(state.script, metrics), () => demoRevise(state.script, metrics), '피드백 수정');
+      state.revise = out;
+      inner.innerHTML = '<ul class="hint" style="margin:0 0 8px 18px">' + out.issues.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>' +
+        (out.dropAt && out.dropAt.sentence ? '<p class="hint">이탈 추정: 약 ' + out.dropAt.seconds + '초 · ' + out.dropAt.sentence + '번째 문장 (' + esc(out.dropAt.why || '') + ')</p>' : '') +
+        out.versions.map((v, i) => '<div class="card inner" style="padding:10px"><h3>' + esc(v.title) + '</h3><ol style="margin:6px 0 0 18px">' +
+          v.sentences.map(s => '<li>' + esc(s) + '</li>').join('') + '</ol>' +
+          '<button class="btn xs ghost" data-ver="' + i + '">이 안으로 대본 바꾸기</button></div>').join('') +
+        '<p class="hint">고지: ' + esc(out.disclosure || '') + (out.demo ? ' · 데모' : ' · Gemini') + '</p>';
+      $$('#recipeInner [data-ver]').forEach(b => b.addEventListener('click', () => {
+        const v = out.versions[+b.dataset.ver]; if (!v) return;
+        state.script.sentences = v.sentences.map(t => ({ text: t }));
+        state.voice = null;
+        renderScript(); renderTimeline(); buildScenes(); ensurePreview();
+        toast('수정안을 대본에 적용했습니다', 'good');
+      }));
+    });
+  }
+
   async function geminiScript() {
     const p = state.product || {};
     const langName = LANG_NAME[state.scriptOpts ? state.scriptOpts.lang : 'ko'];
     const opts = state.scriptOpts || { lang: 'ko', tone: 'friendly', length: 'normal' };
-    const n = LEN_COUNT[opts.length] || 5;
+    const meta = typeMeta(opts.type || 'base');
+    const n = Math.min(LEN_COUNT[opts.length] || 5, meta.sentences + 2);
+    const typeBlock = meta.id === 'base' ? [] : [
+      '【대본 유형】 ' + meta.label,
+      '- 문장 순서(반드시): ' + meta.order,
+      '- 분량: 본문 ' + meta.chars + '자 이내, 문장 ' + Math.max(4, n) + '개 내외, 문장당 2~4초',
+      '- 유형 규칙: ' + (TYPE_RULES[meta.id] || []).join(' / ')
+    ];
     const prompt = [
-      '너는 한국 쇼츠 대본 작가다. 아래 제품으로 세로 쇼츠(9:16) 대본을 JSON으로 써라.',
+      '너는 숏폼 커머스 대본 작가다. 아래 제품으로 세로 쇼츠(9:16, 15~20초) 대본을 JSON으로 써라.',
       '제품: ' + (p.name || '제품') + ' / 카테고리: ' + (p.category || '') + ' / 가격: ' + (p.price || ''),
       '후킹 포인트: ' + ((p.hooks || []).join(' | ') || '없음'),
       '키워드: ' + ((p.keywords || []).join(', ') || '없음'),
       '언어: ' + langName + ' / 톤: ' + TONE_NAME[opts.tone] + ' / 길이: ' + n + '문장',
+      ...typeBlock,
       '규칙: 첫 문장은 1초 훅. 광고 같지 않게, 실제 사용 후기처럼. 각 문장은 20~45자(한국어 기준).',
+      '제품 정보에 없는 수치·효과·수상·판매량을 지어내지 마라.',
       '상단 제목은 정확히 2줄(각 22자 이내, 한국어면 18자 이내), 강조 단어 3~5개.',
-      '후킹 후보(hooks)는 첫 문장 자리에 그대로 쓸 수 있는 1초 훅 문장 6개이고 서로 다른 각도로 써라.',
+      '후킹 후보(hooks)는 첫 문장 자리에 그대로 쓸 수 있는 1초 훅 6개, 서로 다른 각도(호기심·공감·반전·질문·숫자).',
+      opts.comment ? "마지막 1~2문장은 댓글을 부르는 문장으로 끝낸다('댓글 달아주세요' 직접 요청 금지)." : '',
       'JSON: {"titles":[string,string],"highlights":[string],"hooks":[string x6],"sentences":[string]} — 문장은 정확히 ' + n + '개.'
-    ].join('\n');
+    ].filter(Boolean).join('\n');
     const raw = await geminiJSON(prompt, { temp: 0.9, maxTokens: 1400 });
     const titles = (Array.isArray(raw.titles) ? raw.titles : []).slice(0, 2).map(t => String(t).slice(0, 40));
     while (titles.length < 2) titles.push(titles[0] || '쇼츠 대본');
@@ -1043,11 +1385,13 @@
     }
     hooks = hooks.slice(0, 6);
     hooks[0] = sents[0].text;
-    return {
-      ...opts, titles, hooks,
+    const out = {
+      ...opts, titles, hooks, script_type: meta.id,
       highlights: (Array.isArray(raw.highlights) ? raw.highlights : []).slice(0, 6).map(String),
       sentences: sents.slice(0, 9), demo: false
     };
+    if (opts.comment) out.comment_line = String(raw.comment_line || '').slice(0, 80) || demoComment(p).closing;
+    return out;
   }
 
   async function writeScript() {
@@ -1056,11 +1400,20 @@
     btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 작성 중';
     status.textContent = '대본 작성 중…';
     try {
-      const out = await withDemoFallback(geminiScript, () => demoScript(state.product, state.scriptOpts.lang, state.scriptOpts.tone, state.scriptOpts.length), '대본 작성');
+      const opts = state.scriptOpts;
+      const out = await withDemoFallback(geminiScript,
+        () => demoScriptByType(state.product, opts.type || 'base', opts.lang, opts.tone, opts.length, !!opts.comment), '대본 작성');
+      if (opts.comment && out.comment_line && out.script_type && out.script_type !== 'base') {
+        const sents = (out.sentences || []).slice();
+        sents[sents.length - 1] = { text: out.comment_line };
+        out.sentences = sents;
+      }
       state.script = out;
       state.voice = null;
       renderScript(); renderTimeline(); buildScenes(); ensurePreview();
-      status.textContent = (out.demo ? '데모' : 'Gemini') + ' 대본 완료 · ' + out.sentences.length + '문장' + (out.__fallback ? ' (Gemini 실패 → 데모)' : '');
+      status.textContent = (out.demo ? '데모' : 'Gemini') + ' 대본 완료 · ' + out.sentences.length + '문장'
+        + (out.script_type && out.script_type !== 'base' ? ' · ' + typeMeta(out.script_type).label : '')
+        + (out.__fallback ? ' (Gemini 실패 → 데모)' : '');
       toast('대본 ' + out.sentences.length + '문장을 만들었습니다', 'good');
       logActivity('✍️', '대본 ' + out.sentences.length + '문장 · 후킹 후보 ' + ((out.hooks || []).length) + '개' + (out.demo ? ' (데모)' : ' (AI)'));
     } catch (e) {
@@ -4311,6 +4664,41 @@
       });
     });
     $('#btnWriteScript').addEventListener('click', writeScript);
+    renderTypeChips();
+    const typeBox = $('#typeChips');
+    if (typeBox) typeBox.addEventListener('click', e => {
+      const b = e.target.closest('.type-chip'); if (!b) return;
+      state.scriptOpts.type = b.dataset.type || 'base';
+      renderTypeChips();
+      const meta = typeMeta(state.scriptOpts.type);
+      const st = $('#scriptStatus');
+      if (st && !state.script) st.textContent = '유형: ' + meta.label + ' — 「AI 대본 쓰기」를 눌러 주세요.';
+    });
+    const cChk = $('#commentLineChk');
+    if (cChk) cChk.addEventListener('change', () => { state.scriptOpts.comment = !!cChk.checked; });
+    [['#btnHooks5', runHooks5], ['#btnComment', runComment], ['#btnMaterials', runMaterials], ['#btnRevise', runRevise]]
+      .forEach(([sel, fn]) => { const b = $(sel); if (b) b.addEventListener('click', fn); });
+    const rBox = $('#recipeBox');
+    if (rBox) rBox.addEventListener('click', e => {
+      const h5 = e.target.closest('[data-hook5]');
+      if (h5 && state.hooks5) {
+        const h = state.hooks5.hooks[+h5.dataset.hook5]; if (!h) return;
+        if (!state.script) { toast('먼저 대본을 만들어 주세요', 'bad'); return; }
+        state.script.hooks = state.script.hooks || [];
+        if (!state.script.hooks.includes(h.text)) state.script.hooks.unshift(h.text);
+        if (!state.script.sentences.length) state.script.sentences.push({ text: h.text });
+        else state.script.sentences[0] = { text: h.text };
+        state.voice = null;
+        renderScript(); renderTimeline(); buildScenes(); ensurePreview();
+        toast('첫 문장을 바꿨습니다: ' + h.text, 'good');
+        return;
+      }
+      const cl = e.target.closest('[data-close]');
+      if (cl && state.commentCands) {
+        const q = state.commentCands.questions[+cl.dataset.close]; if (!q) return;
+        appendSentence(q.text);
+      }
+    });
     ['#title1', '#title2', '#highlightInput'].forEach(sel => $(sel).addEventListener('input', syncScriptFromInputs));
     $('#sentList').addEventListener('input', e => {
       const ta = e.target.closest('[data-sent-text]'); if (!ta) return;
@@ -4616,7 +5004,7 @@
 
   /* ---------------- init ---------------- */
   function init() {
-    state.scriptOpts = { lang: 'ko', tone: 'friendly', length: 'normal' };
+    state.scriptOpts = { lang: 'ko', tone: 'friendly', length: 'normal', type: 'base', comment: false };
     loadKeys(); loadPreset(); loadCoupang(); loadAccounts(); loadFamous(); loadMulti(); loadTrend();
     renderKeys(); updateModeUI(); updateAnalyzeHint(); renderAccounts();
     renderLinks(); renderFiles(); renderProduct(); renderRefs(); renderCart();
@@ -4644,6 +5032,8 @@
     version: '2.0.0', state, PV, FAMOUS, AD_SAFE, adBox,
     goStep, goView, VIEW_ORDER, syncLinks, runAnalysis, writeScript, buildVoice, exportWebM, drawFrame, drawPreview,
     totalDuration, previewTimeline, suggestTitles, pickTitle, makeThumbBlob, downloadThumb,
+    SCRIPT_TYPES, TOP_TIER_TYPES, typeMeta, isTopType, renderTypeChips, demoScriptByType, demoHooks5,
+    demoComment, demoMaterials, demoRevise, hookRule, runHooks5, runComment, runMaterials, runRevise,
     buildHubTexts, renderHub, savePreset, loadPreset, renderKeys, renderHistory, saveCoupang, updateModeUI,
     addFiles, addHistoryFromProduct, togglePreview, stopPlayback, synthSpeechBuffer, bgmBuffer,
     disclosureText, autoLink, coupangLink, fillSampleLinks, isDemo: () => state.demo || !realKeys().length,
