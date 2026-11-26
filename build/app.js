@@ -1132,11 +1132,16 @@
     return { hooks, best: hooks[0].text, demo: true };
   }
 
-  function hookRule(type, text) {
+  function hookRule(type, text, product) {
     const t = String(text || '').trim();
     if (!t) return '빈 문장';
     if (t.length > 24) return '24자 초과';
     if (HOOK_BANNED.some(w => t.includes(w))) return '금지 표현';
+    const p = product || state.product || {};
+    const name = String(p.name || '').trim();
+    if (name.length >= 3 && t.includes(name)) return '상품명 노출';
+    const digits = String(p.price || '').replace(/[^0-9]/g, '');
+    if (digits && t.includes(digits)) return '가격 노출';
     return '';
   }
 
@@ -1197,7 +1202,7 @@
     const raw = await geminiJSON(prompt, { temp: 1.0, maxTokens: 900 });
     const hooks = (raw.hooks || []).map(h => typeof h === 'string' ? { text: h } : h)
       .map(h => ({ type: HOOK5_TYPES.includes(h.type) ? h.type : '호기심', text: String(h.text || '').trim(), reason: String(h.reason || '').slice(0, 60) }))
-      .filter(h => h.text && !hookRule(h.type, h.text)).slice(0, 5);
+      .filter(h => h.text && !hookRule(h.type, h.text, p)).slice(0, 5);
     while (hooks.length < 5) { const f = demoHooks5(p).hooks[hooks.length]; if (!hooks.some(h => h.text === f.text)) hooks.push(f); else break; }
     const best = hooks.some(h => h.text === raw.best) ? raw.best : (hooks[0] || {}).text || '';
     return { hooks: hooks.slice(0, 5), best, demo: false };
