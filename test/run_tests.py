@@ -768,6 +768,17 @@ with sync_playwright() as p:
     pg.wait_for_timeout(200)
     check(state(pg, 'SV.state.style.ad') == 'coupang', '쿠팡 파트너스 대가성 표시 선택')
     check('쿠팡' in pg.inner_text('#pvAd'), '대가성 문구 배지')
+    adz = pg.evaluate("""() => {
+      const b = SV.adBox(1080, 1920, 'ad', 60, 32);
+      const c = SV.adBox(1080, 1920, 'coupang', 700, 28);
+      return { badgeTop: b.y, badgeRight: b.x + b.w, badgeLeft: b.x,
+               discBottom: c.y + c.h, discTop: c.y, discLeft: c.x, discRight: c.x + c.w };
+    }""")
+    check(adz['badgeTop'] >= 150, '(광고) 배지가 상단 아이콘 줄 아래', round(adz['badgeTop'], 1))
+    check(1080 - adz['badgeRight'] >= 40, '(광고) 배지 우측 여백 40px 이상', round(1080 - adz['badgeRight'], 1))
+    check(1920 - adz['discBottom'] >= 390, '대가성 문구가 하단 채널명·제목·진행바 위', round(1920 - adz['discBottom'], 1))
+    check(adz['discLeft'] >= 30 and 1080 - adz['discRight'] >= 30, '대가성 문구 가로 여백', [round(adz['discLeft'], 1), round(1080 - adz['discRight'], 1)])
+    check(adz['discTop'] > 1200, '대가성 문구는 화면 아래쪽 고지 자리', round(adz['discTop'], 1))
 
     # 프리셋 저장
     set_range(pg, '#capSize', 44)
