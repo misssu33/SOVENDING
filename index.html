@@ -3657,6 +3657,21 @@ pre.cmd{
     return s;
   }
 
+  // (광고) 배지·대가성 문구 상자 — 유튜브 쇼츠 모바일 UI를 피한 자리(1080×1920 기준).
+  //   위에서 190px: 상단 검색·카메라·더보기 아이콘 줄 아래 / 우측 여백 40px
+  //   아래에서 400px: 채널명·제목·진행바가 깔리는 아래 390px 위
+  const AD_SAFE = { top: 0.099, bottom: 0.792, right: 0.037 };
+  function adBox(W, H, ad, textWidth, fontSize) {
+    const pad = fontSize * 0.55, h = fontSize + pad * 1.4;
+    if (ad === 'coupang') {
+      const w = Math.min(W * 0.94, textWidth + pad * 2);
+      return { x: W / 2 - w / 2, y: H * AD_SAFE.bottom - h, w, h, tx: W / 2, align: 'center' };
+    }
+    const w = textWidth + pad * 2;
+    const x = W - Math.round(W * AD_SAFE.right) - w;
+    return { x, y: H * AD_SAFE.top, w, h, tx: x + pad, align: 'left' };
+  }
+
   function drawFrame(ctx, W, H, t) {
     const st = state.style;
     const script = state.script;
@@ -3714,7 +3729,7 @@ pre.cmd{
       let cy = clamp(st.capY, 50, 95) / 100 * H;
       let startY = cy - (wrap.lines.length - 1) * lineH / 2;
       // 광고·대가성 문구와 겹치지 않게 위로 올린다
-      const adReserve = st.ad === 'coupang' ? H * 0.90 : st.ad === 'ad' ? H * 0.94 : H * 0.985;
+      const adReserve = st.ad === 'coupang' ? H * 0.757 : st.ad === 'ad' ? H * 0.985 : H * 0.985;
       const bottom = startY + (wrap.lines.length - 1) * lineH + fs / 2;
       if (bottom > adReserve) startY -= (bottom - adReserve);
       startY = Math.max(H * 0.22, startY);
@@ -3724,23 +3739,20 @@ pre.cmd{
         drawRichLine(ctx, line, wrap.space, W / 2, startY + i * lineH, hl, st.capColor, '#ffd166', st.capStroke);
       });
     }
-    // 광고 / 대가성 문구
+    // 광고 / 대가성 문구 — 유튜브 쇼츠 상·하단 UI 세이프존을 피한다.(PC 패키지와 같은 자리)
     if (st.ad !== 'off') {
       const label = st.ad === 'coupang'
         ? '광고 · 쿠팡 파트너스 활동의 일환으로 수수료를 제공받습니다'
         : '광고';
       const fs = Math.round(W * (st.ad === 'coupang' ? 0.026 : 0.030));
       ctx.font = '700 ' + fs + 'px ' + FONT_STACK.sans;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      const tw = ctx.measureText(label).width;
-      const pad = fs * 0.55;
-      const bw = Math.min(W * 0.94, tw + pad * 2), bh = fs + pad * 1.4;
-      const bx = W / 2 - bw / 2;
-      const by = st.ad === 'coupang' ? H * 0.925 : H * 0.028;
+      ctx.textBaseline = 'middle';
+      const box = adBox(W, H, st.ad, ctx.measureText(label).width, fs);
       ctx.fillStyle = 'rgba(0,0,0,.55)';
-      roundRect(ctx, bx, by - bh / 2, bw, bh, bh / 2); ctx.fill();
+      roundRect(ctx, box.x, box.y, box.w, box.h, box.h / 2); ctx.fill();
       ctx.fillStyle = 'rgba(255,255,255,.92)';
-      ctx.fillText(label, W / 2, by + 1);
+      ctx.textAlign = box.align;
+      ctx.fillText(label, box.tx, box.y + box.h / 2 + 1);
     }
     ctx.restore();
   }
@@ -6623,7 +6635,7 @@ pre.cmd{
 
   /* 테스트·고급 사용용 공개 훅(읽기/자동화). UI와 같은 코드 경로를 쓴다. */
   window.SV = {
-    version: '2.0.0', state, PV, FAMOUS,
+    version: '2.0.0', state, PV, FAMOUS, AD_SAFE, adBox,
     goStep, goView, VIEW_ORDER, syncLinks, runAnalysis, writeScript, buildVoice, exportWebM, drawFrame, drawPreview,
     totalDuration, previewTimeline, suggestTitles, pickTitle, makeThumbBlob, downloadThumb,
     buildHubTexts, renderHub, savePreset, loadPreset, renderKeys, renderHistory, saveCoupang, updateModeUI,
