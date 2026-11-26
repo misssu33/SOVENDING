@@ -1,0 +1,518 @@
+127.0.0.1 - - [26/Nov/2026 11:35:26] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [26/Nov/2026 11:35:33] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [26/Nov/2026 11:35:50] "GET /index.html HTTP/1.1" 200 -
+
+=== 0. 정적 산출물 ===
+  PASS  index.html 단일 파일 생성  [393,429B]
+  PASS  외부 스크립트 태그 없음
+  PASS  외부 리소스(src/href) 0건  [[]]
+  PASS  CSS @import 없음
+  PASS  CDN/웹폰트 참조 없음
+  PASS  성과·1~6단계·도구 7개 패널 14개  [14]
+  PASS  메뉴·패널 view 14개 이상
+  PASS  사이드바 🔥 유명 쇼츠 메뉴
+  PASS  사이드바 도구 메뉴(멀티 다운로더·자막 지우개)
+  PASS  사이드바 도구 메뉴(음성→텍스트·떡상 순위)
+  PASS  STT 화면에 Gemini 키·로컬 Whisper 안내 1줄
+  PASS  떡상 화면에 Playboard 수집 안내 1줄
+  PASS  내 성과·쿠팡파트너스 메뉴
+  PASS  상단 로그인 0/6 배지
+  PASS  업로드 허브 5개 플랫폼 카드
+  PASS  모바일 viewport 메타
+  PASS  앱 코드 인라인 크기  [360,646자]
+
+=== 1. 초기 로드 · 네트워크 · 콘솔 ===
+  PASS  콘솔 오류 0건  [[]]
+  PASS  JS 예외 0건  [[]]
+  PASS  로드 시 외부 요청 0건  [[]]
+  PASS  페이지 제목  [쇼츠자판기 · 링크에서 쇼츠까지]
+  PASS  데모 모드 배지
+  PASS  시작 화면 = 내 성과
+  PASS  상단 AI/키 배지
+  PASS  상단 로그인 0/6
+  PASS  내 성과 카드 8개
+  PASS  키 0/5 배지
+  PASS  미리보기 플레이스홀더 표시
+  PASS  미리보기 캔버스 540×960  [[540, 960]]
+  PASS  메뉴 14개(성과·1~6·도구 7)
+  PASS  한 번에 한 단계만 표시
+  PASS  시작 화면은 단계 번호 없음
+  PASS  데스크톱 가로 오버플로 없음  [[1440, 1440]]
+  PASS  인라인 스크립트 1개  [1]
+
+=== 2. 0단계 · Gemini 키 5개 관리와 자동 전환 ===
+  PASS  ⚙️ 설정 모달 열림
+  PASS  처음 키 슬롯 1개
+  PASS  키 슬롯 5개까지 추가
+  PASS  6번째 키는 추가되지 않음(최대 5)
+  PASS  저장 후 모달 닫힘
+  PASS  키 5/5 반영
+  PASS  localStorage에 키 5개 저장  [5]
+  PASS  신규 키 상태 = 대기  [['대기', '대기', '대기', '대기', '대기']]
+  PASS  키 마스킹 표시
+  PASS  데모 끄면 AI 연결됨 · 키 5/5 배지
+  PASS  Esc로 모달 닫힘
+  PASS  ⚙ 설정 화면에 연결 테스트 버튼
+  PASS  키 연결 테스트 성공(모의 200)
+  PASS  테스트 호출 1회  [['KEY-1']]
+  PASS  로그인 계정 6개 체크박스
+  PASS  로그인 2/6 상태바 반영  [로그인 2/6]
+  PASS  로그인 계정 로컬 저장
+  PASS  로그인 체크 해제
+  PASS  429 키 3개 건너뛰고 4번 키 사용  [['KEY-1', 'KEY-2', 'KEY-3', 'KEY-4']]
+  PASS  키 상태 활성/한도초과/대기  [['exhausted', 'exhausted', 'exhausted', 'active', 'waiting']]
+  PASS  활성 키 = 4번
+  PASS  UI 상태 라벨 반영  [['한도초과', '한도초과', '한도초과', '활성', '대기']]
+  PASS  실제 Gemini 결과로 분석 완료  [분석 완료]
+  PASS  모의 Gemini 제품명 반영
+  PASS  레퍼런스 6개
+  PASS  분석 후 2단계로 이동
+  PASS  다음 호출은 살아있는 4번 키만 사용  [['KEY-4']]
+  PASS  모든 키 소진 시 데모 결과로 폴백
+  PASS  폴백 안내 문구 표시  [Gemini 실패 → 데모 결과 (모든 키가 한도 초과입니다. 내일 다시 시도하거나 데모 모드를 쓰세요.)]
+  PASS  소진된 키는 재시도하지 않음  [['KEY-4', 'KEY-5']]
+  PASS  한도 상태 초기화 버튼  [['waiting', 'waiting', 'waiting', 'waiting', 'waiting']]
+  PASS  저장소 초기화 후 데모 모드
+
+=== 3. 1~2단계 · 링크·업로드·분석·레퍼런스 ===
+  PASS  예시 링크 3개
+  PASS  링크 카운터 3/12
+  PASS  링크 목록 3개
+  PASS  첫 링크가 대표 영상
+  PASS  대표 배지 표시
+  PASS  링크는 최대 12개로 제한  [12]
+  PASS  카운터 12/12
+  PASS  초과 표시
+  PASS  URL이 아닌 줄은 무시
+  PASS  첫 링크를 다시 대표로 지정
+  PASS  둘째 링크를 대표로 지정
+  PASS  링크 빼기
+  PASS  내 영상 2개 업로드
+  PASS  영상 메타(길이·해상도) 읽기  [{'d': 3, 'w': 270, 'h': 480, 'poster': True}]
+  PASS  영상 포스터 썸네일 생성
+  PASS  내 영상에 대표로 버튼 제공
+  PASS  내 영상을 대표 영상으로 지정
+  PASS  더우인 플랫폼 선택
+  PASS  플랫폼 선택 해제
+  PASS  데모 레퍼런스 6개
+  PASS  제품 정보(이름·후킹·키워드·가격)  [{'name': '에어프라이어 5.5L 대용량', 'hooks': 3, 'kw': 3, 'price': '39,900~59,000원', 'conf': 76}]
+  PASS  신뢰도 표시  [76]
+  PASS  제품 카드 이름 반영
+  PASS  후킹 포인트 3개 이상
+  PASS  레퍼런스 조회수·좋아요·특징  [{'v': 1827748, 'l': 88099, 'f': '첫 1초 훅 · 자막 크게', 'p': 'tiktok'}]
+  PASS  레퍼런스 플랫폼 다양성
+  PASS  조회수 배지 렌더링
+  PASS  좋아요 배지 렌더링
+  PASS  레퍼런스 커버 캔버스가 그려짐  [{'mn': 7, 'mx': 255, 'w': 216, 'h': 312}]
+  PASS  장바구니 담기
+  PASS  장바구니 카운터 1
+  PASS  장바구니 빼기
+  PASS  장바구니 2개
+  PASS  다음: 대본 쓰기로 이동
+
+=== 4. 3단계 · 대본 4개 언어·톤·길이 ===
+  PASS  English 대본 생성
+  PASS  English 대본 본문은 영어(제품명만 한글 허용)  [영문 146 / 한글 34]
+  PASS  English 제목 2줄
+  PASS  기본 길이 5문장
+  PASS  日本語 대본 생성
+  PASS  中文 대본 생성
+  PASS  짧게 = 3문장
+  PASS  길게 = 7문장
+  PASS  보통 = 5문장
+  PASS  유머 톤 반영
+  PASS  후킹 멘트 후보 6개 생성  [6]
+  PASS  후킹 칩 6개 표시
+  PASS  현재 첫 문장 칩 표시
+  PASS  후킹 칩을 누르면 첫 문장 교체  [기름 없이 바삭하게. 이건 진짜였어요.]
+  PASS  문장 편집창도 같이 바뀜
+  PASS  후킹 교체 시 음성 무효화
+  PASS  1번 후킹으로 되돌리기
+  PASS  상단 제목 2줄 생성  [['에어프라이어 5.5L 대용량 이거 실화?', '기름 없이 바삭하게 진짜였어']]
+  PASS  제목 입력창 동기화
+  PASS  강조 단어 3개 이상
+  PASS  강조 단어 칩 표시
+  PASS  문장 편집기 5개
+  PASS  제목 직접 수정 가능
+  PASS  문장 직접 수정 반영
+  PASS  문장 수정 시 기존 음성 무효화
+  PASS  제목 직접 수정 반영
+  PASS  문장 추가
+  PASS  문장 삭제
+
+=== 5. 3단계 · 음성 타임라인(실측)과 재생 ===
+  PASS  데모 모드 합성음  [demo]
+  PASS  문장 수만큼 타임라인  [5]
+  PASS  모든 문장 길이 > 0.3s
+  PASS  타임라인 길이 = 실제 오디오 길이(실측)
+  PASS  총 길이 = 마지막 문장 끝
+  PASS  타임라인 표 5행
+  PASS  총 길이 표시  [18.5s]
+  PASS  음성 모드 배지
+  PASS  실측 길이 안내  [브라우저 합성음 · Kore · 문장 사이 0.15초 · 5문장 · 18.5초 (실측)]
+  PASS  오디오 샘플레이트  [44100]
+  PASS  기본 문장 사이 간격 0.15초  [0.15]
+  PASS  타임라인에 0.15초 간격 반영
+  PASS  문장 사이 간격 4개 선택지
+  PASS  구글 목소리 5종 라벨
+  PASS  목소리 선택 5개
+  PASS  구글 목소리(Gemini Native TTS) 라벨
+  PASS  속도를 올리면 길이가 줄어듦  [18.5→14.5]
+  PASS  간격 0.5초 → 총 길이 4×0.35 늘어남  [18.46→19.86]
+  PASS  타임라인 간격 0.5초 반영  [[0.5, 0.5, 0.5, 0.5]]
+  PASS  간격 라벨 갱신  [0.5초]
+  PASS  간격 0초(바로 이어서) → 총 길이 감소  [18.46→17.86]
+  PASS  간격 0초면 문장이 바로 이어짐
+  PASS  간격 0.15초로 복귀
+  PASS  미리보기 재생 진행  [0.97]
+  PASS  재생 중 버튼 상태
+  PASS  일시정지
+
+=== 5b. Gemini 실제 경로(모의) · 대본/TTS ===
+  PASS  TTS용 키 1개 저장
+  PASS  TTS 테스트는 AI 연결 모드
+  PASS  Gemini 대본 경로 사용  [False]
+  PASS  모의 Gemini 제목 2줄  [['모의 제목 하나', '모의 제목 둘']]
+  PASS  모의 Gemini 문장 5개
+  PASS  제목 입력창에 Gemini 결과
+  PASS  Gemini TTS 모드  [gemini]
+  PASS  PCM 24kHz 0.6초 → 타임라인 실측  [[0.6, 0.6, 0.6, 0.6, 0.6]]
+  PASS  Gemini TTS 총 길이(간격 0.15초)  [3.6]
+  PASS  TTS 모드 배지  [Gemini TTS]
+  PASS  TTS 요청에 AUDIO 응답 모달리티
+  PASS  TTS 보이스 지정
+  PASS  Gemini 경로 JS 예외 0건  [[]]
+  PASS  Gemini 경로 콘솔 오류 0건  [[]]
+
+=== 6. 4단계 · 장면·가리기·스타일·프리셋 ===
+  PASS  문장별 장면 5개
+  PASS  장면 카드 5개
+  PASS  업로드 영상이 장면으로 연결
+  PASS  장면 썸네일 렌더링  [{'mn': 46, 'mx': 255, 'w': 104, 'h': 128}]
+  PASS  장면 빼기
+  PASS  장면 카드 빼짐 표시
+  PASS  장면을 빼면 미리보기 변화
+  PASS  장면 복원
+  PASS  장면 추가(교체) 동작  [clip-a.webm]
+  PASS  가리기 끄면 미리보기 변화
+  PASS  블러 ↔ 모자이크 차이
+  PASS  가리기 방식 라벨
+  PASS  가리기 강도 조절 반영
+  PASS  상단 제목 켜기/끄기 반영
+  PASS  자막 크기·위치·글꼴·색상 각각 반영  [[4138198325, 202240529, 2575507769, 1302614185, 4157220869]]
+  PASS  자막 수치 라벨
+  PASS  BGM 선택 반영
+  PASS  BGM 배지 갱신
+  PASS  BGM 볼륨 라벨
+  PASS  (광고) 표시 끄기
+  PASS  광고 표시 정보 갱신
+  PASS  (광고) 표시 켜기
+  PASS  쿠팡 파트너스 대가성 표시 선택
+  PASS  대가성 문구 배지
+  PASS  ‘다음 영상에도 이 설정으로’ 저장  [44]
+  PASS  프리셋 저장 상태 표시
+  PASS  유효 장면 수 표시
+  PASS  가리기 정보 표시
+  PASS  장면 보기 = 해당 문장으로 이동
+
+=== 7. 9:16 미리보기 · WebM 내보내기 ===
+  PASS  미리보기 해상도 표시
+  PASS  미리보기 9:16 비율  [0.5625]
+  PASS  탐색바 50% 이동  [9.23/18.46]
+  PASS  내보내기용 2문장
+  PASS  WebM 생성  [{'size': 2890034, 'type': 'video/webm'}]
+  PASS  MIME video/webm  [video/webm]
+  PASS  실시간 녹화 시간  [9.2s / 9.0s]
+  PASS  내보내기 진행바 종료
+  PASS  내보내기 완료 표시  [완료 · 2.76MB · 9.0초]
+  PASS  WebM 해상도 540×960  [(540, 960)]
+  PASS  WebM 길이 = 음성 길이  [8.93 vs 8.99]
+  PASS  내보낸 WebM 오디오 디코드  [{'dur': 8.939977324263038, 'rms': 0.3512753058430416, 'sr': 44100}]
+  PASS  내보낸 오디오에 소리 포함  [0.3512753058430416]
+  PASS  내보낸 영상 프레임이 비어 있지 않음  [{'mn': 0, 'mx': 255}]
+  PASS  다운로드 링크 = 생성된 파일  [2890034]
+  PASS  WebM 파일 다운로드  [2,890,034B]
+  PASS  파일명 .webm  [shorts-vending-2026-11-26.webm]
+  PASS  내보내면 링크 히스토리 자동 추가
+
+=== 8. 5단계 · 제목 10개·썸네일 PNG ===
+  PASS  제목 10개
+  PASS  제목별 점수
+  PASS  제목 목록 렌더링
+  PASS  제목 선택
+  PASS  해시태그 자동 입력
+  PASS  설명 자동 입력
+  PASS  썸네일 문구 자동 입력
+  PASS  설명에 해시태그 포함
+  PASS  썸네일 미리보기 렌더링  [{'mn': 0, 'mx': 255, 'w': 540, 'h': 960}]
+  PASS  직접 쓴 설명은 유지  [ #살림템
+
+직접 추가한 문장입니다.]
+  PASS  썸네일 문구 유지/갱신
+  PASS  썸네일 1080×1920  [(1080, 1920)]
+  PASS  PNG 시그니처  [[137, 80, 78, 71, 13, 10, 26, 10]]
+  PASS  PNG 용량  [2,198,876B]
+  PASS  내려받은 PNG 크기  [(1080, 1920)]
+  PASS  썸네일 파일명 .png  [shorts-thumbnail-2026-11-26.png]
+  PASS  내려받은 PNG 용량  [2198876]
+  PASS  설명 클립보드 복사  [143]
+
+=== 9. 6단계 · 다뿌려 업로드 허브 ===
+  PASS  5개 플랫폼 문구 생성  [{'yt': 334, 'tt': 156, 'ig': 324, 'th': 179, 'fb': 322}]
+  PASS  유튜브 #Shorts 태그
+  PASS  틱톡에는 #Shorts 없음
+  PASS  유튜브 문구에 대가성 문구
+  PASS  업로드 문구에 쿠팡 링크
+  PASS  인스타 해시태그 5개 이상
+  PASS  글자수 카운터  [335 / 5,000 vs 335]
+  PASS  허브 상태 문구
+  PASS  플랫폼 문구 복사
+  PASS  전체 문구 복사
+  PASS  업로드 페이지 링크 5개
+  PASS  유튜브 스튜디오 링크
+  PASS  틱톡 업로드 링크
+  PASS  인스타·스레드·페이스북 링크
+  PASS  게시 버튼 직접 누르기 기본 켜짐
+  PASS  게시 확인 필요 배지
+  PASS  직접 게시 배지
+
+=== 10. 7단계 · 쿠팡 파트너스 ===
+  PASS  키 로컬 저장
+  PASS  저장 상태 배지
+  PASS  서버 전송 없음 안내
+  PASS  시크릿 키가 어떤 요청에도 없음  [[]]
+  PASS  상품명 기반 자동 링크  [https://link.coupang.com/a/에어프라이어-5-5l-대용량-ha3e]
+  PASS  자동 링크에 상품명 반영  [https://link.coupang.com/a/에어프라이어-5-5l-대용량-ha3e]
+  PASS  링크 히스토리 행 추가  [2]
+  PASS  히스토리 카운터
+  PASS  히스토리 제품명·링크  [{'id': 'iu37b', 'name': '에어프라이어 5.5L 대용량', 'link': 'https://link.coupang.com/a/에어프라이어-5-5l-대용량-ha3e', 'date': '2026-11-26T02:36:20.279Z', 'auto': False}]
+  PASS  히스토리 링크 복사
+  PASS  히스토리 삭제
+  PASS  대가성 문구 문구
+  PASS  대가성 문구 복사
+  PASS  대가성 문구 끄면 제거
+  PASS  대가성 문구 다시 포함
+  PASS  자동 생성 끄면 링크 비움
+  PASS  자동 생성 켜면 링크 생성
+  PASS  접두어 변경 반영
+
+=== 10b. 도구 · 🔥 유명 쇼츠 자동생성 및 업로드 ===
+  PASS  영상 찾을 곳 3곳(TikTok·YouTube·Instagram)
+  PASS  기본 3곳 모두 선택
+  PASS  화면 구성 = 꽉 찬/위아래 검은 화면
+  PASS  기본 화면 구성 = 꽉 찬 화면
+  PASS  유명 쇼츠 미리보기 540×960
+  PASS  위아래 검은 화면으로 바뀌면 미리보기 변화
+  PASS  화면 구성 배지 갱신  [위아래 검은 화면]
+  PASS  하단 내 문구가 미리보기에 반영
+  PASS  상단 제목 반영
+  PASS  썸네일 안 쓰기 체크
+  PASS  설정 JSON에 썸네일 미사용 반영
+  PASS  표기 위치 오른쪽 위 반영
+  PASS  표기 위치 왼쪽 아래 반영
+  PASS  AI 표기 끄면 미리보기 변화
+  PASS  TOP N 끄면 미리보기 변화
+  PASS  TOP N 숫자 변경
+  PASS  TOP N 카운트다운이 시간에 따라 바뀜
+  PASS  영상 찾을 곳 1곳만 남김  [['tiktok']]
+  PASS  마지막 1곳은 해제되지 않음
+  PASS  3곳 다시 선택
+  PASS  소재 후보 표시
+  PASS  소재 고르기
+  PASS  하루 최대 개수 + 버튼
+  PASS  하루 최대 개수 - 버튼
+  PASS  하루 개수 라벨
+  PASS  시간대 선택(Asia/Yakutsk)
+  PASS  계정 추가
+  PASS  스케줄 표 행 = 계정 수
+  PASS  계정 삭제
+  PASS  계정별 다음 올릴 시각 계산  [[{'day': datetime.datetime(2026, 11, 26, 2, 36, 29, 108000, tzinfo=datetime.timezone.utc), 'sec': 41428, 'hh': 11, 'mm': 30, 'ss': 28}, {'day': datetime.datetime(2026, 11, 26, 2, 36, 29, 108000, tzinfo=datetime.timezone.utc), 'sec': 68485, 'hh': 19, 'mm': 1, 'ss': 25}]]
+  PASS  랜덤 오차 ±30분 이내  [29.5]
+  PASS  스케줄은 새로 계산해도 동일(고정 시드)
+  PASS  설정 JSON 시간대·하루 개수  [('Asia/Seoul', 10)]
+  PASS  설정 JSON 랜덤 ±1800초
+  PASS  설정 JSON 계정 3일치 슬롯
+  PASS  설정 JSON TOP N 표기  [{'ai': True, 'topN': True, 'topCount': 7, 'position': 'tl'}]
+  PASS  설정 JSON 내려받기  [sovending-famous-schedule-2026-11-26.json]
+  PASS  JSON 파일명 .json  [sovending-famous-schedule-2026-11-26.json]
+  PASS  유명 쇼츠 WebM 생성  [{'size': 1860366}]
+  PASS  유명 쇼츠 실시간 녹화  [9.0s / 9.0s]
+  PASS  유명 쇼츠 WebM 540×960  [{'w': 540, 'h': 960}]
+  PASS  유명 쇼츠 내보내기 완료 표시  [완료 · 1.77MB · 9.0초]
+
+=== 10c. 도구 · 자막 지우개 ===
+  PASS  업로드한 영상 2개 선택 가능  [['il5hw', 'im5ik']]
+  PASS  자막 지우개 캔버스 540×960  [[540, 960]]
+  PASS  가릴 세로 위치 변경 반영
+  PASS  가릴 너비 변경 반영
+  PASS  블러 ↔ 모자이크 전환
+  PASS  가리기 강도 변경 반영
+  PASS  강도 라벨
+  PASS  영역 기본값 복원
+  PASS  자막 지우개 WebM 생성  [{'size': 700364}]
+  PASS  자막 지우개 녹화 시간  [3.0s]
+  PASS  자막 지우개 WebM 540×960  [{'w': 540, 'h': 960}]
+  PASS  자막 지우개 완료 표시  [완료 · 0.67MB · 3.0초 · 영상만(음성 없음)]
+
+=== 10d. 도구 · 멀티 다운로더 ===
+  PASS  중복·빈 줄·링크 아닌 줄 정리  [3]
+  PASS  링크 개수 표시
+  PASS  링크 목록 3개
+  PASS  yt-dlp 명령에 링크 포함
+  PASS  명령에 links.txt 안내
+  PASS  URL 목록 복사
+  PASS  명령 복사127.0.0.1 - - [26/Nov/2026 11:37:20] "GET /index.html HTTP/1.1" 200 -
+
+  PASS  목록에서 링크 빼기
+  PASS  links.txt 내려받기  [links.txt]
+  PASS  멀티 링크 목록 저장
+
+=== 10e. 도구 · 음성→텍스트 (STT) ===
+  PASS  STT 패널 표시
+  PASS  언어 4종(자동·한국어·영어·일본어)
+  PASS  출력 형식 2종(대본 텍스트·SRT)
+  PASS  파일 없으면 인식 버튼 비활성
+  PASS  Gemini·로컬 Whisper 안내 1줄
+  PASS  음성·영상이 아닌 파일 거부  [음성·영상 파일만 올릴 수 있습니다 (mp3 · wav · m4a · mp4 · webm · mov).]
+  PASS  14MB 초과 파일은 인식하지 않고 안내  [{'file': False, 'err': '파일이 15.0MB로 14MB를 넘습니다. Gemini 요청 한도(20MB) 때문에 인식할 수 없으니, PC 패키지의 Whisper STT로 처리하세요.'}]
+  PASS  파일 이름 표시  [stt-speech.wav]
+  PASS  오디오 파일은 audio 플레이어로 미리보기
+  PASS  오디오 길이 읽기  [3]
+  PASS  전송 MIME 표시 audio/wav  [🎧
+stt-speech.wav
+94KB · audio/wav · 3.0초
+✕]
+  PASS  언어 기본값 = 자동 감지
+  PASS  언어 선택 반영
+  PASS  데모 모드에서 STT는 API를 호출하지 않음  [0]
+  PASS  데모 모드 안내 문구  [데모 모드가 켜져 있어 실제 인식은 하지 않습니다. ⚙️ 설정에서 데모 모드를 끄세요.]
+  PASS  Gemini 인식 호출 1회  [['KEY-STT']]
+  PASS  프롬프트 + inlineData 2파트 전송  [[['text'], ['inlineData']]]
+  PASS  MIME audio/wav 전송  [audio/wav]
+  PASS  파일 base64 포함  [128104]
+  PASS  SRT·한국어 프롬프트 전달
+  PASS  SRT 4줄 파싱  [4]
+  PASS  결과 배지 완료
+  PASS  타임스탬프 표 4줄
+  PASS  결과에 타임스탬프 표시
+  PASS  타임스탬프 행 4개
+  PASS  SRT 파일명 .srt  [stt-2026-11-26.srt]
+  PASS  SRT 시간 형식  [1|00:00:00,000 --> 00:00:02,200|안녕]
+  PASS  TXT는 자막 문장 4줄만  [stt-2026-11-26.txt]
+  PASS  한 번에 복사
+  PASS  STT → 3단계로 이동
+  PASS  SRT 4줄이 대본 4문장으로  [4]
+  PASS  3단계 문장 목록 반영
+  PASS  STT → 4단계로 이동
+  PASS  SRT 타이밍 4줄 적용
+  PASS  타임라인 길이 = SRT 끝 시각  [11.9]
+  PASS  SRT 시작 시각으로 자막 배치  [2.2]
+  PASS  4단계 STT 타이밍 표시줄
+  PASS  STT 타이밍 해제
+  PASS  결과 직접 편집 반영
+  PASS  타임스탬프 없으면 세그먼트 0
+  PASS  타임스탬프 없으면 SRT 저장 비활성
+  PASS  샘플 결과 배지
+  PASS  샘플 안내 문구
+  PASS  텍스트 형식은 타임스탬프 없음
+  PASS  텍스트 프롬프트 전달
+  PASS  텍스트만 있으면 SRT 저장 비활성
+  PASS  말소리 없으면 결과를 만들지 않음
+  PASS  실패 안내 표시  [인식 실패: 이 파일에서 말소리를 찾지 못했습니다]
+  PASS  파일 빼기
+
+=== 10f. 도구 · 떡상 순위 & 6종 벤치마킹 ===
+  PASS  떡상·벤치마킹 패널 표시
+  PASS  Playboard 수집 안내 1줄
+  PASS  정렬 5종
+  PASS  신호 필터 5종
+  PASS  플랫폼 필터 4종
+  PASS  샘플 차트 8개  [8]
+  PASS  순위표 8행
+  PASS  개수 배지
+  PASS  떡상 점수 내림차순 정렬  [[74, 72, 71, 65]]
+  PASS  NEW 신호 계산
+  PASS  구작 역주행 신호 계산
+  PASS  구독자 대비 조회수 배율 계산  [[19.5, 44.3, 22.9]]
+  PASS  순위표 텍스트 렌더
+  PASS  표 붙여넣기 2개 추가  [10]
+  PASS  만 단위 숫자 파싱  [(120000, 3600000)]
+  PASS  NEW 순위 변동 파싱
+  PASS  업로드일 → 경과일 계산  [3]
+  PASS  ▲5 순위 급등 파싱  [{'type': 'up', 'delta': 5}]
+  PASS  JSON 불러오기  [{'id': 'i15uki', 'rank': None, 'move': {'type': 'up', 'delta': 2}, 'channel': 'JSON채널', 'title': 'JSON 영상', 'platform': 'other', 'subs': 20000, 'views': 300000, 'likes': 0, 'comments': 0, 'uploaded': 1795446000000, 'url': '', 'desc': '', 'captions': '', 'memo': ''}]
+  PASS  직접 추가 폼
+  PASS  영상 직접 추가  [{'id': 'i16vbf', 'rank': None, 'move': {'type': 'new', 'delta': 0}, 'channel': '수동채널', 'title': '직접 추가 영상', 'platform': 'youtube', 'subs': 10000, 'views': 90000, 'likes': 0, 'comments': 0, 'uploaded': 1795574216715, 'url': '', 'desc': '', 'captions': '', 'memo': ''}]
+  PASS  배율 정렬
+  PASS  조회수 정렬
+  PASS  NEW 필터  [['new', 'new', 'new', 'new', 'new']]
+  PASS  구작 역주행 필터
+  PASS  신작 급등 필터(7일 이내)
+  PASS  플랫폼 필터
+  PASS  선택 영상 제목 표시  [3천원으로 주방 정리 끝내기]
+  PASS  선택 영상 편집 폼
+  PASS  점수 계산 5항목
+  PASS  메모 저장
+  PASS  STT 결과를 자막 칸에 넣기
+  PASS  벤치마킹 Gemini 호출 1회  [['KEY-STT']]
+  PASS  선택 영상 정보로 프롬프트  [너는 한국 쇼츠·릴스 콘텐츠 전략가다. 아래 경쟁 영상을 분석해 6종 벤치마킹을 JSON 하나로 써라.
+영상]
+  PASS  자막(STT)도 프롬프트에 포함
+  PASS  Gemini 배지
+  PASS  6종 카드 6개
+  PASS  6종 구조화 결과(후킹·대본·장면·자막·CTA)
+  PASS  ① 레퍼런스 분석 반영
+  PASS  결과가 화면에 표시
+  PASS  후킹 복사
+  PASS  JSON 저장  [bench-2026-11-26.json]
+  PASS  JSON에 점수 포함
+  PASS  MD 6종 모두 저장  [bench-2026-11-26.md]
+  PASS  ③ 후킹 → 3단계 후킹 후보 6개
+  PASS  3단계 후킹 칩 6개 표시
+  PASS  ④ 대본 → 3단계 대본 5문장
+  PASS  ⑤ 장면 → 4단계 장면 이름  [모의 장면 1 · 결과 클로즈업]
+  PASS  ⑥ 자막 → 4단계 자막 5줄
+  PASS  벤치마킹 자막은 음성 길이 기준(STT 타이밍 없음)
+  PASS  키 없이 데모 6종 결과(표시됨)
+  PASS  데모일 때는 API를 호출하지 않음  [1]
+  PASS  떡상 목록 누적  [12]
+
+=== 11. 레이아웃 · 데스크톱/모바일 ===
+  PASS  데스크톱 3열 레이아웃  [3]
+  PASS  데스크톱 미리보기 오른쪽 배치  [{'mainRight': 1026, 'pvLeft': 1046, 'pvTop': 82}]
+  PASS  중간 폭에서는 1열로 전환  [1]
+  PASS  1024 가로 오버플로 없음  [[1024, 1024]]
+  PASS  데스크톱 떡상 화면 가로 오버플로 없음  [[1600, 1600]]
+  PASS  모바일 390 모든 화면(14개) 가로 오버플로 없음  [[]]
+  PASS  모바일 하단 내비 표시
+  PASS  모바일 터치 타깃 ≥30px  [[('#btnAnalyze', 41), ('#btnWriteScript', 41), ('#btnExportMini', 31), ('#btnSuggestTitles', 31), ('#btnSettings', 31)]]
+  PASS  모바일 단계 레일 가로 스크롤
+  PASS  단계 레일이 화면 폭을 넘지 않음
+  PASS  모바일 STT 파일 영역 폭  [340]
+  PASS  모바일 떡상 표는 안쪽에서 스크롤  [{'sw': 600, 'cw': 336}]
+  PASS  모바일 미리보기 9:16 · ≤300px  [[248, 0.5625177204423022]]
+  PASS  모바일 다음 버튼
+  PASS  모바일 이전 버튼
+
+=== 12. 새로고침 후 저장 유지 ===
+  PASS  프리셋 유지
+  PASS  프리셋이 UI에 적용  [44]
+  PASS  쿠팡 키 유지
+  PASS  링크 히스토리 유지
+  PASS  쿠팡 키 입력창 복원
+  PASS  유명 쇼츠 설정 유지  [Asia/Seoul]
+  PASS  멀티 다운로더 목록 유지
+  PASS  떡상 순위 목록 유지  [12]
+  PASS  6종 벤치마킹 결과 유지
+  PASS  새로고침 후 순위표 복원
+  PASS  새로고침 후 벤치마킹 복원
+  PASS  데모 모드 설정 유지
+  PASS  전체 플로우 콘솔 오류 0건(모의 429 제외)  [[]]
+  PASS  429는 자동 전환 테스트에서만 발생  [5]
+  PASS  전체 플로우 JS 예외 0건  [[]]
+  PASS  Gemini 외 외부 요청 0건  [[]]
+  PASS  외부 요청은 Gemini API뿐  [12]
+
+======================================================
+테스트 결과: 466/466 통과, 실패 0건
+======================================================

@@ -1,9 +1,9 @@
-127.0.0.1 - - [26/Nov/2026 11:30:47] "GET /index.html HTTP/1.1" 200 -
-127.0.0.1 - - [26/Nov/2026 11:30:54] "GET /index.html HTTP/1.1" 200 -
-127.0.0.1 - - [26/Nov/2026 11:31:10] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [26/Nov/2026 11:35:26] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [26/Nov/2026 11:35:33] "GET /index.html HTTP/1.1" 200 -
+127.0.0.1 - - [26/Nov/2026 11:35:50] "GET /index.html HTTP/1.1" 200 -
 
 === 0. 정적 산출물 ===
-  PASS  index.html 단일 파일 생성  [393,416B]
+  PASS  index.html 단일 파일 생성  [393,429B]
   PASS  외부 스크립트 태그 없음
   PASS  외부 리소스(src/href) 0건  [[]]
   PASS  CSS @import 없음
@@ -19,7 +19,7 @@
   PASS  상단 로그인 0/6 배지
   PASS  업로드 허브 5개 플랫폼 카드
   PASS  모바일 viewport 메타
-  PASS  앱 코드 인라인 크기  [360,641자]
+  PASS  앱 코드 인라인 크기  [360,646자]
 
 === 1. 초기 로드 · 네트워크 · 콘솔 ===
   PASS  콘솔 오류 0건  [[]]
@@ -164,7 +164,7 @@
   PASS  간격 0초(바로 이어서) → 총 길이 감소  [18.46→17.86]
   PASS  간격 0초면 문장이 바로 이어짐
   PASS  간격 0.15초로 복귀
-  PASS  미리보기 재생 진행  [0.94]
+  PASS  미리보기 재생 진행  [0.97]
   PASS  재생 중 버튼 상태
   PASS  일시정지
 
@@ -220,18 +220,18 @@
   PASS  미리보기 9:16 비율  [0.5625]
   PASS  탐색바 50% 이동  [9.23/18.46]
   PASS  내보내기용 2문장
-  PASS  WebM 생성  [{'size': 3778918, 'type': 'video/webm'}]
+  PASS  WebM 생성  [{'size': 2890034, 'type': 'video/webm'}]
   PASS  MIME video/webm  [video/webm]
-  PASS  실시간 녹화 시간  [9.1s / 9.0s]
+  PASS  실시간 녹화 시간  [9.2s / 9.0s]
   PASS  내보내기 진행바 종료
-  PASS  내보내기 완료 표시  [완료 · 3.60MB · 9.0초]
+  PASS  내보내기 완료 표시  [완료 · 2.76MB · 9.0초]
   PASS  WebM 해상도 540×960  [(540, 960)]
-  PASS  WebM 길이 = 음성 길이  [8.97 vs 8.99]
-  PASS  내보낸 WebM 오디오 디코드  [{'dur': 8.939977324263038, 'rms': 0.11632369858505903, 'sr': 44100}]
-  PASS  내보낸 오디오에 소리 포함  [0.11632369858505903]
+  PASS  WebM 길이 = 음성 길이  [8.93 vs 8.99]
+  PASS  내보낸 WebM 오디오 디코드  [{'dur': 8.939977324263038, 'rms': 0.3512753058430416, 'sr': 44100}]
+  PASS  내보낸 오디오에 소리 포함  [0.3512753058430416]
   PASS  내보낸 영상 프레임이 비어 있지 않음  [{'mn': 0, 'mx': 255}]
-  PASS  다운로드 링크 = 생성된 파일  [3778918]
-  PASS  WebM 파일 다운로드  [3,778,918B]
+  PASS  다운로드 링크 = 생성된 파일  [2890034]
+  PASS  WebM 파일 다운로드  [2,890,034B]
   PASS  파일명 .webm  [shorts-vending-2026-11-26.webm]
   PASS  내보내면 링크 히스토리 자동 추가
 
@@ -285,7 +285,7 @@
   PASS  자동 링크에 상품명 반영  [https://link.coupang.com/a/에어프라이어-5-5l-대용량-ha3e]
   PASS  링크 히스토리 행 추가  [2]
   PASS  히스토리 카운터
-  PASS  히스토리 제품명·링크  [{'id': 'iu09n', 'name': '에어프라이어 5.5L 대용량', 'link': 'https://link.coupang.com/a/에어프라이어-5-5l-대용량-ha3e', 'date': '2026-11-26T02:31:36.539Z', 'auto': False}]
+  PASS  히스토리 제품명·링크  [{'id': 'iu37b', 'name': '에어프라이어 5.5L 대용량', 'link': 'https://link.coupang.com/a/에어프라이어-5-5l-대용량-ha3e', 'date': '2026-11-26T02:36:20.279Z', 'auto': False}]
   PASS  히스토리 링크 복사
   PASS  히스토리 삭제
   PASS  대가성 문구 문구
@@ -326,7 +326,7 @@
   PASS  계정 추가
   PASS  스케줄 표 행 = 계정 수
   PASS  계정 삭제
-  PASS  계정별 다음 올릴 시각 계산  [[{'day': datetime.datetime(2026, 11, 26, 2, 31, 45, 32000, tzinfo=datetime.timezone.utc), 'sec': 41428, 'hh': 11, 'mm': 30, 'ss': 28}, {'day': datetime.datetime(2026, 11, 26, 2, 31, 45, 32000, tzinfo=datetime.timezone.utc), 'sec': 68485, 'hh': 19, 'mm': 1, 'ss': 25}]]
+  PASS  계정별 다음 올릴 시각 계산  [[{'day': datetime.datetime(2026, 11, 26, 2, 36, 29, 108000, tzinfo=datetime.timezone.utc), 'sec': 41428, 'hh': 11, 'mm': 30, 'ss': 28}, {'day': datetime.datetime(2026, 11, 26, 2, 36, 29, 108000, tzinfo=datetime.timezone.utc), 'sec': 68485, 'hh': 19, 'mm': 1, 'ss': 25}]]
   PASS  랜덤 오차 ±30분 이내  [29.5]
   PASS  스케줄은 새로 계산해도 동일(고정 시드)
   PASS  설정 JSON 시간대·하루 개수  [('Asia/Seoul', 10)]
@@ -335,13 +335,13 @@
   PASS  설정 JSON TOP N 표기  [{'ai': True, 'topN': True, 'topCount': 7, 'position': 'tl'}]
   PASS  설정 JSON 내려받기  [sovending-famous-schedule-2026-11-26.json]
   PASS  JSON 파일명 .json  [sovending-famous-schedule-2026-11-26.json]
-  PASS  유명 쇼츠 WebM 생성  [{'size': 1845157}]
+  PASS  유명 쇼츠 WebM 생성  [{'size': 1860366}]
   PASS  유명 쇼츠 실시간 녹화  [9.0s / 9.0s]
   PASS  유명 쇼츠 WebM 540×960  [{'w': 540, 'h': 960}]
-  PASS  유명 쇼츠 내보내기 완료 표시  [완료 · 1.76MB · 9.0초]
+  PASS  유명 쇼츠 내보내기 완료 표시  [완료 · 1.77MB · 9.0초]
 
 === 10c. 도구 · 자막 지우개 ===
-  PASS  업로드한 영상 2개 선택 가능  [['il6b0', 'im6bp']]
+  PASS  업로드한 영상 2개 선택 가능  [['il5hw', 'im5ik']]
   PASS  자막 지우개 캔버스 540×960  [[540, 960]]
   PASS  가릴 세로 위치 변경 반영
   PASS  가릴 너비 변경 반영
@@ -349,10 +349,10 @@
   PASS  가리기 강도 변경 반영
   PASS  강도 라벨
   PASS  영역 기본값 복원
-  PASS  자막 지우개 WebM 생성  [{'size': 776129}]
+  PASS  자막 지우개 WebM 생성  [{'size': 700364}]
   PASS  자막 지우개 녹화 시간  [3.0s]
   PASS  자막 지우개 WebM 540×960  [{'w': 540, 'h': 960}]
-  PASS  자막 지우개 완료 표시  [완료 · 0.74MB · 3.0초 · 영상만(음성 없음)]
+  PASS  자막 지우개 완료 표시  [완료 · 0.67MB · 3.0초 · 영상만(음성 없음)]
 
 === 10d. 도구 · 멀티 다운로더 ===
   PASS  중복·빈 줄·링크 아닌 줄 정리  [3]
@@ -361,7 +361,7 @@
   PASS  yt-dlp 명령에 링크 포함
   PASS  명령에 links.txt 안내
   PASS  URL 목록 복사
-  PASS  명령 복사127.0.0.1 - - [26/Nov/2026 11:32:36] "GET /index.html HTTP/1.1" 200 -
+  PASS  명령 복사127.0.0.1 - - [26/Nov/2026 11:37:20] "GET /index.html HTTP/1.1" 200 -
 
   PASS  목록에서 링크 빼기
   PASS  links.txt 내려받기  [links.txt]
@@ -440,9 +440,9 @@ stt-speech.wav
   PASS  NEW 순위 변동 파싱
   PASS  업로드일 → 경과일 계산  [3]
   PASS  ▲5 순위 급등 파싱  [{'type': 'up', 'delta': 5}]
-  PASS  JSON 불러오기  [{'id': 'i15rdv', 'rank': None, 'move': {'type': 'up', 'delta': 2}, 'channel': 'JSON채널', 'title': 'JSON 영상', 'platform': 'other', 'subs': 20000, 'views': 300000, 'likes': 0, 'comments': 0, 'uploaded': 1795446000000, 'url': '', 'desc': '', 'captions': '', 'memo': ''}]
+  PASS  JSON 불러오기  [{'id': 'i15uki', 'rank': None, 'move': {'type': 'up', 'delta': 2}, 'channel': 'JSON채널', 'title': 'JSON 영상', 'platform': 'other', 'subs': 20000, 'views': 300000, 'likes': 0, 'comments': 0, 'uploaded': 1795446000000, 'url': '', 'desc': '', 'captions': '', 'memo': ''}]
   PASS  직접 추가 폼
-  PASS  영상 직접 추가  [{'id': 'i16s34', 'rank': None, 'move': {'type': 'new', 'delta': 0}, 'channel': '수동채널', 'title': '직접 추가 영상', 'platform': 'youtube', 'subs': 10000, 'views': 90000, 'likes': 0, 'comments': 0, 'uploaded': 1795573932592, 'url': '', 'desc': '', 'captions': '', 'memo': ''}]
+  PASS  영상 직접 추가  [{'id': 'i16vbf', 'rank': None, 'move': {'type': 'new', 'delta': 0}, 'channel': '수동채널', 'title': '직접 추가 영상', 'platform': 'youtube', 'subs': 10000, 'views': 90000, 'likes': 0, 'comments': 0, 'uploaded': 1795574216715, 'url': '', 'desc': '', 'captions': '', 'memo': ''}]
   PASS  배율 정렬
   PASS  조회수 정렬
   PASS  NEW 필터  [['new', 'new', 'new', 'new', 'new']]
