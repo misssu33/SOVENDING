@@ -1,0 +1,107 @@
+{
+  "generatedAt": "2026-11-26T02:32:17.756Z",
+  "demo": false,
+  "video": {
+    "title": "3천원으로 주방 정리 끝내기",
+    "channel": "살림천재TV",
+    "platform": "youtube",
+    "subs": 180000,
+    "views": 4120000,
+    "score": {
+      "ratio": 22.88888888888889,
+      "ratioPts": 27.192494218596572,
+      "movePts": 25,
+      "freshPts": 15,
+      "engPts": 3.6003236245954695,
+      "total": 71,
+      "reverse": false,
+      "tag": "NEW",
+      "tagKind": "new",
+      "days": 2,
+      "label": "떡상"
+    }
+  },
+  "bench": {
+    "analysis": {
+      "summary": "모의 분석: 결과를 먼저 보여 주는 구조입니다.",
+      "whyHot": "결과 선공개와 짧은 자막",
+      "target": "20~40대 시청자",
+      "strengths": [
+        "결과 선공개",
+        "짧은 자막"
+      ],
+      "weaknesses": [
+        "중반 늘어짐"
+      ],
+      "keywords": [
+        "주방정리",
+        "살림템"
+      ]
+    },
+    "plan": {
+      "concept": "모의 콘셉트",
+      "angle": "결과 → 이유 3가지 → CTA",
+      "format": "9:16 세로",
+      "length": "20초",
+      "points": [
+        "도입 2초",
+        "이유 3개",
+        "마무리 CTA"
+      ]
+    },
+    "hooks": [
+      "모의 후킹 1",
+      "모의 후킹 2",
+      "모의 후킹 3",
+      "모의 후킹 4",
+      "모의 후킹 5",
+      "모의 후킹 6"
+    ],
+    "script": [
+      "모의 대본 1",
+      "모의 대본 2",
+      "모의 대본 3",
+      "모의 대본 4",
+      "모의 대본 5"
+    ],
+    "scenes": [
+      {
+        "time": "0-3초",
+        "scene": "모의 장면 1",
+        "visual": "결과 클로즈업",
+        "caption": "결과부터",
+        "direction": "확대"
+      },
+      {
+        "time": "3-9초",
+        "scene": "모의 장면 2",
+        "visual": "준비물",
+        "caption": "준비물 3개",
+        "direction": "손으로"
+      },
+      {
+        "time": "9-16초",
+        "scene": "모의 장면 3",
+        "visual": "전후 비교",
+        "caption": "순서만 바꿔도",
+        "direction": "분할"
+      }
+    ],
+    "captions": [
+      "모의 자막 1",
+      "모의 자막 2",
+      "모의 자막 3",
+      "모의 자막 4",
+      "모의 자막 5"
+    ],
+    "cta": {
+      "text": "모의 CTA 문구",
+      "comment": "댓글 유도 문구",
+      "hashtags": [
+        "#쇼츠",
+        "#모의"
+      ]
+    },
+    "demo": false
+  }
+}

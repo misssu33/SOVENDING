@@ -84,6 +84,10 @@ def make_clips():
             continue
         subprocess.run([ff, '-y', '-loglevel', 'error', '-f', 'lavfi', '-i', src,
                         '-c:v', 'libvpx-vp9', '-b:v', '320k', '-an', str(path)], check=True)
+    wav = MEDIA / 'stt-speech.wav'
+    if not wav.exists() or wav.stat().st_size < 10000:
+        subprocess.run([ff, '-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=16000:duration=3',
+                        '-af', 'volume=0.6', '-ac', '1', str(wav)], check=True)
     return [MEDIA / n for n, _, _ in specs]
 
 # ---------------- 가짜 Gemini ----------------
@@ -104,6 +108,38 @@ MOCK_REF_PAYLOAD = {
         {'platform': 'douyin', 'title': '30시간 배터리 실험', 'views': 3100000, 'likes': 120000, 'features': '실험 구성'},
         {'platform': 'tiktok', 'title': '한쪽만 껴도 끊김 없음?', 'views': 660000, 'likes': 28000, 'features': '반전 훅'}
     ]
+}
+
+MOCK_STT_SRT = """1
+00:00:00,000 --> 00:00:02,200
+안녕하세요 오늘은 주방 정리 팁을 알려드릴게요
+
+2
+00:00:02,200 --> 00:00:05,100
+준비물은 딱 세 가지입니다
+
+3
+00:00:05,100 --> 00:00:08,400
+이렇게만 해도 싱크대가 훨씬 넓어 보여요
+
+4
+00:00:08,400 --> 00:00:11,900
+궁금하면 고정댓글 확인해 보세요
+"""
+MOCK_STT_TEXT = "안녕하세요 오늘은 주방 정리 팁을 알려드릴게요.\n준비물은 딱 세 가지입니다.\n이렇게만 해도 싱크대가 훨씬 넓어 보여요.\n궁금하면 고정댓글 확인해 보세요."
+BENCH_MOCK = {
+    'analysis': {'summary': '모의 분석: 결과를 먼저 보여 주는 구조입니다.', 'whyHot': '결과 선공개와 짧은 자막',
+                 'target': '20~40대 시청자', 'strengths': ['결과 선공개', '짧은 자막'], 'weaknesses': ['중반 늘어짐'],
+                 'keywords': ['주방정리', '살림템']},
+    'plan': {'concept': '모의 콘셉트', 'angle': '결과 → 이유 3가지 → CTA', 'format': '9:16 세로', 'length': '20초',
+             'points': ['도입 2초', '이유 3개', '마무리 CTA']},
+    'hooks': ['모의 후킹 1', '모의 후킹 2', '모의 후킹 3', '모의 후킹 4', '모의 후킹 5', '모의 후킹 6'],
+    'script': ['모의 대본 1', '모의 대본 2', '모의 대본 3', '모의 대본 4', '모의 대본 5'],
+    'scenes': [{'time': '0-3초', 'scene': '모의 장면 1', 'visual': '결과 클로즈업', 'caption': '결과부터', 'direction': '확대'},
+               {'time': '3-9초', 'scene': '모의 장면 2', 'visual': '준비물', 'caption': '준비물 3개', 'direction': '손으로'},
+               {'time': '9-16초', 'scene': '모의 장면 3', 'visual': '전후 비교', 'caption': '순서만 바꿔도', 'direction': '분할'}],
+    'captions': ['모의 자막 1', '모의 자막 2', '모의 자막 3', '모의 자막 4', '모의 자막 5'],
+    'cta': {'text': '모의 CTA 문구', 'comment': '댓글 유도 문구', 'hashtags': ['#쇼츠', '#모의']}
 }
 
 def gemini_handler(route, request):
@@ -144,6 +180,18 @@ def gemini_handler(route, request):
             return route.fulfill(status=429, headers={'content-type': 'application/json'},
                                  body='{"error":{"code":429,"message":"quota exceeded"}}')
         body = {'candidates': [{'content': {'parts': [{'text': json.dumps(MOCK_REF_PAYLOAD, ensure_ascii=False)}]}, 'finishReason': 'STOP'}]}
+        return route.fulfill(status=200, headers={'content-type': 'application/json'}, body=json.dumps(body))
+    if mock['mode'] == 'stt':
+        body = {'candidates': [{'content': {'parts': [{'text': MOCK_STT_SRT}]}, 'finishReason': 'STOP'}]}
+        return route.fulfill(status=200, headers={'content-type': 'application/json'}, body=json.dumps(body))
+    if mock['mode'] == 'stt-text':
+        body = {'candidates': [{'content': {'parts': [{'text': MOCK_STT_TEXT}]}, 'finishReason': 'STOP'}]}
+        return route.fulfill(status=200, headers={'content-type': 'application/json'}, body=json.dumps(body))
+    if mock['mode'] == 'stt-none':
+        body = {'candidates': [{'content': {'parts': [{'text': 'SPEECH_NOT_FOUND'}]}, 'finishReason': 'STOP'}]}
+        return route.fulfill(status=200, headers={'content-type': 'application/json'}, body=json.dumps(body))
+    if mock['mode'] == 'bench':
+        body = {'candidates': [{'content': {'parts': [{'text': json.dumps(BENCH_MOCK, ensure_ascii=False)}]}, 'finishReason': 'STOP'}]}
         return route.fulfill(status=200, headers={'content-type': 'application/json'}, body=json.dumps(body))
     return route.fulfill(status=500, body='{}')
 
@@ -199,10 +247,13 @@ with sync_playwright() as p:
     check(not ext_tags, '외부 리소스(src/href) 0건', ext_tags[:2])
     check('@import' not in html, 'CSS @import 없음')
     check('fonts.googleapis' not in html and 'cdn.' not in html, 'CDN/웹폰트 참조 없음')
-    check(html.count('class="step-panel') == 12, '성과·1~6단계·도구 5개 패널 12개', html.count('class="step-panel'))
-    check(html.count('data-view="') >= 12, '메뉴·패널 view 12개 이상')
+    check(html.count('class="step-panel') == 14, '성과·1~6단계·도구 7개 패널 14개', html.count('class="step-panel'))
+    check(html.count('data-view="') >= 14, '메뉴·패널 view 14개 이상')
     check('유명 쇼츠 자동생성 및 업로드' in html, '사이드바 🔥 유명 쇼츠 메뉴')
     check('멀티 다운로더' in html and '자막 지우개' in html, '사이드바 도구 메뉴(멀티 다운로더·자막 지우개)')
+    check('음성→텍스트 (STT)' in html and '떡상 순위 &amp; 벤치마킹' in html, '사이드바 도구 메뉴(음성→텍스트·떡상 순위)')
+    check('로컬 Whisper는 PC 패키지' in html, 'STT 화면에 Gemini 키·로컬 Whisper 안내 1줄')
+    check('Playboard 실시간 자동 수집은 PC 패키지에서 지원' in html, '떡상 화면에 Playboard 수집 안내 1줄')
     check('내 성과' in html and '쿠팡파트너스 웹페이지 꾸미기' in html, '내 성과·쿠팡파트너스 메뉴')
     check('loginBadge' in html and '로그인 0/6' in html, '상단 로그인 0/6 배지')
     check(html.count('hub-card') >= 5, '업로드 허브 5개 플랫폼 카드')
@@ -235,7 +286,7 @@ with sync_playwright() as p:
     check(pg.is_visible('#previewPh'), '미리보기 플레이스홀더 표시')
     cv = state(pg, "(() => { const c=document.querySelector('#previewCanvas'); return [c.width,c.height]; })()")
     check(cv == [540, 960], '미리보기 캔버스 540×960', cv)
-    check(pg.eval_on_selector_all('#stepRail .step-btn', 'e=>e.length') == 12, '메뉴 12개(성과·1~6·도구 5)')
+    check(pg.eval_on_selector_all('#stepRail .step-btn', 'e=>e.length') == 14, '메뉴 14개(성과·1~6·도구 7)')
     check(pg.eval_on_selector_all('.step-panel.show', 'e=>e.length') == 1, '한 번에 한 단계만 표시')
     check(state(pg, 'SV.state.step') == -1, '시작 화면은 단계 번호 없음')
     ov = pg.evaluate('() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]')
@@ -1178,6 +1229,325 @@ with sync_playwright() as p:
     check(len(saved['links']) == 2, '멀티 링크 목록 저장')
 
     # =========================================================
+    section('10e. 도구 · 음성→텍스트 (STT)')
+    wav = MEDIA / 'stt-speech.wav'
+    goto_view(pg, 'stt')
+    pg.wait_for_timeout(350)
+    check(pg.is_visible('#panel-stt'), 'STT 패널 표시')
+    check(pg.eval_on_selector_all('#sttLang option', 'e=>e.map(o=>o.textContent.trim())') == ['자동 감지', '한국어', '영어', '일본어'], '언어 4종(자동·한국어·영어·일본어)')
+    check(pg.eval_on_selector_all('#segSttFormat [data-v]', 'e=>e.length') == 2, '출력 형식 2종(대본 텍스트·SRT)')
+    check(pg.eval_on_selector('#btnSttRun', 'e=>e.disabled') is True, '파일 없으면 인식 버튼 비활성')
+    check('Gemini 키로 음성 인식' in pg.inner_text('#panel-stt') and '로컬 Whisper는 PC 패키지' in pg.inner_text('#panel-stt'), 'Gemini·로컬 Whisper 안내 1줄')
+
+    pg.set_input_files('#sttFileInput', files=[{'name': 'memo.txt', 'mimeType': 'text/plain', 'buffer': b'hello'}])
+    pg.wait_for_timeout(350)
+    check(state(pg, 'SV.state.stt.file') is None and '음성·영상' in state(pg, 'SV.state.stt.error'), '음성·영상이 아닌 파일 거부', state(pg, 'SV.state.stt.error'))
+    over = pg.evaluate("""() => { const f = new File([new Uint8Array(32)], 'big.mp4', {type:'video/mp4'});
+      Object.defineProperty(f, 'size', {value: 15 * 1024 * 1024}); SV.sttSetFile(f);
+      return { file: !!SV.state.stt.file, err: SV.state.stt.error }; }""")
+    check(over['file'] is False and '14MB' in over['err'], '14MB 초과 파일은 인식하지 않고 안내', over)
+
+    pg.set_input_files('#sttFileInput', str(wav))
+    pg.wait_for_timeout(900)
+    check('stt-speech.wav' in pg.inner_text('#sttFileBadge'), '파일 이름 표시', pg.inner_text('#sttFileBadge'))
+    check(pg.eval_on_selector('#sttAudio', 'e=>!e.classList.contains("hidden")') and pg.eval_on_selector('#sttVideo', 'e=>e.classList.contains("hidden")'), '오디오 파일은 audio 플레이어로 미리보기')
+    dur = state(pg, 'SV.state.stt.dur')
+    check(dur and 2.5 < dur < 3.6, '오디오 길이 읽기', dur)
+    check('audio/wav' in pg.inner_text('#sttFileInfo'), '전송 MIME 표시 audio/wav', pg.inner_text('#sttFileInfo'))
+    check(pg.input_value('#sttLang') == 'auto', '언어 기본값 = 자동 감지')
+    set_select(pg, '#sttLang', 'ko')
+    pg.wait_for_timeout(150)
+    check(state(pg, 'SV.state.stt.lang') == 'ko', '언어 선택 반영')
+
+    # 데모 모드에서는 호출하지 않고 안내
+    pg.evaluate("""() => { SV.state.keys = [{id:'kstt', value:'KEY-STT', status:'waiting', used:0, note:''}];
+      SV.state.demo = true; SV.renderStt(); SV.updateModeUI(); }""")
+    mock['calls'].clear()
+    pg.click('#btnSttRun')
+    pg.wait_for_timeout(350)
+    check(len(mock['calls']) == 0, '데모 모드에서 STT는 API를 호출하지 않음', len(mock['calls']))
+    check('데모 모드' in pg.inner_text('#sttStatus'), '데모 모드 안내 문구', pg.inner_text('#sttStatus'))
+
+    # 실제 인식 (모의 Gemini) — SRT
+    pg.evaluate('() => { SV.state.demo = false; SV.renderStt(); SV.updateModeUI(); }')
+    pg.click('[data-v="srt"]')
+    pg.wait_for_timeout(150)
+    mock['mode'] = 'stt'; mock['calls'].clear(); mock['bodies'].clear()
+    pg.click('#btnSttRun')
+    pg.wait_for_function("() => SV.state.stt.text.includes('-->')", timeout=15000)
+    pg.wait_for_timeout(300)
+    check(len(mock['calls']) == 1, 'Gemini 인식 호출 1회', mock['calls'])
+    parts = mock['bodies'][-1]['contents'][0]['parts']
+    check(len(parts) == 2 and 'inlineData' in parts[1], '프롬프트 + inlineData 2파트 전송', [list(pp.keys()) for pp in parts])
+    check(parts[1]['inlineData']['mimeType'] == 'audio/wav', 'MIME audio/wav 전송', parts[1]['inlineData']['mimeType'])
+    check(len(parts[1]['inlineData']['data']) > 50000, '파일 base64 포함', len(parts[1]['inlineData']['data']))
+    check('SRT 자막 형식' in parts[0]['text'] and '한국어' in parts[0]['text'], 'SRT·한국어 프롬프트 전달')
+    check(state(pg, 'SV.state.stt.segments.length') == 4, 'SRT 4줄 파싱', state(pg, 'SV.state.stt.segments.length'))
+    check(pg.inner_text('#sttResultBadge').strip() == '완료', '결과 배지 완료')
+    check(pg.inner_text('#sttSegCount').strip() == '4', '타임스탬프 표 4줄')
+    check('00:00:00,000' in pg.input_value('#sttResult'), '결과에 타임스탬프 표시')
+    check(pg.eval_on_selector_all('#sttSegBody tr', 'e=>e.length') == 4, '타임스탬프 행 4개')
+
+    with pg.expect_download(timeout=15000) as sd1:
+        pg.click('#btnSttSrt')
+    srt_path = OUT / 'stt-test.srt'
+    sd1.value.save_as(str(srt_path))
+    srt_txt = srt_path.read_text(encoding='utf-8')
+    check(sd1.value.suggested_filename.endswith('.srt'), 'SRT 파일명 .srt', sd1.value.suggested_filename)
+    check(srt_txt.startswith('1\n00:00:00,000 --> 00:00:02,200'), 'SRT 시간 형식', srt_txt[:34].replace('\n', '|'))
+    with pg.expect_download(timeout=15000) as sd2:
+        pg.click('#btnSttTxt')
+    txt_path = OUT / 'stt-test.txt'
+    sd2.value.save_as(str(txt_path))
+    txt_txt = txt_path.read_text(encoding='utf-8')
+    check(sd2.value.suggested_filename.endswith('.txt') and '-->' not in txt_txt and len([l for l in txt_txt.splitlines() if l.strip()]) == 4, 'TXT는 자막 문장 4줄만', sd2.value.suggested_filename)
+    pg.click('#btnSttCopy')
+    pg.wait_for_timeout(250)
+    clip = pg.evaluate('async () => await navigator.clipboard.readText()')
+    check('00:00:00,000 --> 00:00:02,200' in clip, '한 번에 복사')
+
+    # 3단계 대본으로
+    pg.click('#btnSttToScript')
+    pg.wait_for_timeout(450)
+    check(state(pg, 'SV.state.view') == '3', 'STT → 3단계로 이동')
+    check(state(pg, 'SV.state.script.sentences.length') == 4, 'SRT 4줄이 대본 4문장으로', state(pg, 'SV.state.script.sentences.length'))
+    check(pg.eval_on_selector_all('#sentList [data-sent-text]', 'e=>e.length') == 4, '3단계 문장 목록 반영')
+
+    # 4단계 자막으로 (타임스탬프 반영)
+    goto_view(pg, 'stt')
+    pg.wait_for_timeout(250)
+    pg.click('#btnSttToCaption')
+    pg.wait_for_timeout(450)
+    check(state(pg, 'SV.state.view') == '4', 'STT → 4단계로 이동')
+    check(state(pg, 'SV.state.subTl.length') == 4, 'SRT 타이밍 4줄 적용')
+    check(abs(state(pg, 'SV.totalDuration()') - 11.9) < 0.2, '타임라인 길이 = SRT 끝 시각', state(pg, 'SV.totalDuration()'))
+    check(abs(state(pg, 'SV.previewTimeline()[1].start') - 2.2) < 0.05, 'SRT 시작 시각으로 자막 배치', state(pg, 'SV.previewTimeline()[1].start'))
+    check(pg.is_visible('#subTlBar') and 'STT 타임스탬프' in pg.inner_text('#subTlInfo'), '4단계 STT 타이밍 표시줄')
+    pg.click('#btnSubTlOff')
+    pg.wait_for_timeout(300)
+    check(state(pg, 'SV.state.subTl') is None and not pg.is_visible('#subTlBar'), 'STT 타이밍 해제')
+
+    # 결과 직접 편집
+    goto_view(pg, 'stt')
+    pg.wait_for_timeout(250)
+    pg.fill('#sttResult', '수정한 자막 한 줄')
+    pg.wait_for_timeout(450)
+    check(state(pg, 'SV.state.stt.text') == '수정한 자막 한 줄', '결과 직접 편집 반영')
+    check(state(pg, 'SV.state.stt.segments.length') == 0, '타임스탬프 없으면 세그먼트 0')
+    check(pg.eval_on_selector('#btnSttSrt', 'e=>e.disabled') is True, '타임스탬프 없으면 SRT 저장 비활성')
+
+    # 샘플 모드 표시
+    pg.click('#btnSttSample')
+    pg.wait_for_timeout(300)
+    check(pg.inner_text('#sttResultBadge').strip() == '샘플', '샘플 결과 배지')
+    check('샘플' in pg.inner_text('#sttStatus'), '샘플 안내 문구')
+
+    # 대본 텍스트 형식
+    mock['mode'] = 'stt-text'
+    pg.click('[data-v="text"]')
+    pg.wait_for_timeout(150)
+    pg.click('#btnSttRun')
+    pg.wait_for_function("() => SV.state.stt.text.includes('안녕하세요') && !SV.state.stt.text.includes('-->')", timeout=15000)
+    pg.wait_for_timeout(250)
+    check(state(pg, 'SV.state.stt.segments.length') == 0, '텍스트 형식은 타임스탬프 없음')
+    check('순수 텍스트만' in mock['bodies'][-1]['contents'][0]['parts'][0]['text'], '텍스트 프롬프트 전달')
+    check(pg.eval_on_selector('#btnSttSrt', 'e=>e.disabled') is True, '텍스트만 있으면 SRT 저장 비활성')
+
+    # 말소리 없음 응답은 가짜 결과를 만들지 않음
+    mock['mode'] = 'stt-none'
+    pg.click('#btnSttRun')
+    pg.wait_for_function("() => SV.state.stt.error.includes('말소리')", timeout=12000)
+    pg.wait_for_timeout(200)
+    check(state(pg, 'SV.state.stt.text') == '', '말소리 없으면 결과를 만들지 않음')
+    check('실패' in pg.inner_text('#sttStatus'), '실패 안내 표시', pg.inner_text('#sttStatus'))
+
+    pg.evaluate('() => { const b = document.querySelector("#sttFileInput"); }')
+    goto_view(pg, 'stt')
+    pg.wait_for_timeout(200)
+    pg.click('[data-stt-remove]')
+    pg.wait_for_timeout(300)
+    check(state(pg, 'SV.state.stt.file') is None and pg.inner_text('#sttFileBadge').strip() == '파일 없음', '파일 빼기')
+
+    # =========================================================
+    section('10f. 도구 · 떡상 순위 & 6종 벤치마킹')
+    goto_view(pg, 'trend')
+    pg.wait_for_timeout(400)
+    check(pg.is_visible('#panel-trend'), '떡상·벤치마킹 패널 표시')
+    check('Playboard 실시간 자동 수집은 PC 패키지' in pg.inner_text('#panel-trend'), 'Playboard 수집 안내 1줄')
+    check(pg.eval_on_selector_all('#trendSort option', 'e=>e.length') == 5, '정렬 5종')
+    check(pg.eval_on_selector_all('#segTrendFilter [data-v]', 'e=>e.length') == 5, '신호 필터 5종')
+    check(pg.eval_on_selector_all('#trendPlatform [data-pf]', 'e=>e.length') == 4, '플랫폼 필터 4종')
+
+    pg.click('#btnTrendSample')
+    pg.wait_for_timeout(500)
+    check(state(pg, 'SV.state.trend.videos.length') == 8, '샘플 차트 8개', state(pg, 'SV.state.trend.videos.length'))
+    check(pg.eval_on_selector_all('#trendTableBody tr', 'e=>e.length') == 8, '순위표 8행')
+    check(pg.inner_text('#trendCount').strip() == '8개', '개수 배지')
+    scores = pg.evaluate('() => SV.trendList().map(x => x.s.total)')
+    check(scores == sorted(scores, reverse=True), '떡상 점수 내림차순 정렬', scores[:4])
+    sigs = pg.evaluate('() => SV.trendList().map(x => x.s)')
+    check(any(x['tag'] == 'NEW' for x in sigs), 'NEW 신호 계산')
+    check(any(x['reverse'] for x in sigs), '구작 역주행 신호 계산')
+    check(any(abs(x['ratio'] - 22.9) < 0.6 for x in sigs), '구독자 대비 조회수 배율 계산', [round(x['ratio'], 1) for x in sigs[:3]])
+    r0 = pg.evaluate('() => SV.trendList()[0]')
+    check(pg.inner_text('#trendTableBody tr').strip() != '', '순위표 텍스트 렌더')
+
+    # 표 붙여넣기(탭 구분·헤더 있음)
+    pg.fill('#trendInput', '순위\t채널\t구독자\t조회수\t업로드\t순위 변동\n1\t테스트채널\t12만\t360만\t3일 전\tNEW\n2\t둘째채널\t3.5만\t21만\t40일 전\t▲5')
+    pg.click('#btnTrendParse')
+    pg.wait_for_timeout(450)
+    check(state(pg, 'SV.state.trend.videos.length') == 10, '표 붙여넣기 2개 추가', state(pg, 'SV.state.trend.videos.length'))
+    tv = pg.evaluate('() => SV.state.trend.videos.find(v => v.channel === "테스트채널")')
+    check(tv['subs'] == 120000 and tv['views'] == 3600000, '만 단위 숫자 파싱', (tv['subs'], tv['views']))
+    check(tv['move']['type'] == 'new', 'NEW 순위 변동 파싱')
+    tvdays = pg.evaluate('() => SV.trendScore(SV.state.trend.videos.find(v => v.channel === "테스트채널")).days')
+    check(tv['uploaded'] and tvdays is not None and abs(tvdays - 3) <= 1, '업로드일 → 경과일 계산', tvdays)
+    tv2 = pg.evaluate('() => SV.state.trend.videos.find(v => v.channel === "둘째채널")')
+    check(tv2['move']['type'] == 'up' and tv2['move']['delta'] == 5, '▲5 순위 급등 파싱', tv2['move'])
+
+    # JSON 파일 불러오기
+    pg.set_input_files('#trendFileInput', files=[{'name': 'chart.json', 'mimeType': 'application/json',
+        'buffer': json.dumps([{'title': 'JSON 영상', 'channel': 'JSON채널', 'subscribers': '2만', 'views': '30만', 'uploadDate': '2026-11-24', 'rankChange': '▲2'}], ensure_ascii=False).encode('utf-8')}])
+    pg.wait_for_timeout(600)
+    jv = pg.evaluate('() => SV.state.trend.videos.find(v => v.channel === "JSON채널")')
+    check(bool(jv) and jv['subs'] == 20000 and jv['views'] == 300000, 'JSON 불러오기', jv)
+
+    # 직접 추가
+    pg.click('#btnTrendManual')
+    pg.wait_for_timeout(200)
+    check(pg.is_visible('#trendAddBox'), '직접 추가 폼')
+    pg.fill('#tNewTitle', '직접 추가 영상')
+    pg.fill('#tNewChannel', '수동채널')
+    pg.fill('#tNewSubs', '1만')
+    pg.fill('#tNewViews', '9만')
+    pg.fill('#tNewDate', '1일 전')
+    pg.fill('#tNewMove', 'NEW')
+    pg.click('#btnTrendAdd')
+    pg.wait_for_timeout(450)
+    mv = pg.evaluate('() => SV.state.trend.videos.find(v => v.channel === "수동채널")')
+    check(bool(mv) and mv['subs'] == 10000 and mv['views'] == 90000 and mv['move']['type'] == 'new', '영상 직접 추가', mv)
+
+    # 정렬·필터
+    set_select(pg, '#trendSort', 'ratio')
+    pg.wait_for_timeout(300)
+    ratios = pg.evaluate('() => SV.trendList().map(x => x.s.ratio)')
+    check(ratios == sorted(ratios, reverse=True), '배율 정렬')
+    set_select(pg, '#trendSort', 'views')
+    pg.wait_for_timeout(300)
+    views = pg.evaluate('() => SV.trendList().map(x => x.v.views)')
+    check(views == sorted(views, reverse=True), '조회수 정렬')
+    set_select(pg, '#trendSort', 'score')
+    pg.wait_for_timeout(250)
+    pg.click('#segTrendFilter [data-v="new"]')
+    pg.wait_for_timeout(300)
+    news = pg.evaluate('() => SV.trendList().map(x => x.v.move.type)')
+    check(news and all(t == 'new' for t in news), 'NEW 필터', news)
+    pg.click('#segTrendFilter [data-v="reverse"]')
+    pg.wait_for_timeout(300)
+    revs = pg.evaluate('() => SV.trendList().map(x => x.s.reverse)')
+    check(revs and all(revs), '구작 역주행 필터')
+    pg.click('#segTrendFilter [data-v="fresh"]')
+    pg.wait_for_timeout(300)
+    fresh = pg.evaluate('() => SV.trendList().map(x => x.s.days)')
+    check(fresh and all(d is not None and d <= 7 for d in fresh), '신작 급등 필터(7일 이내)')
+    pg.click('#segTrendFilter [data-v="all"]')
+    pg.wait_for_timeout(250)
+    pg.click('#trendPlatform [data-pf="tiktok"]')
+    pg.wait_for_timeout(300)
+    pfs = pg.evaluate('() => SV.trendList().map(x => x.v.platform)')
+    check(pfs and all(p == 'tiktok' for p in pfs), '플랫폼 필터')
+    pg.click('#trendPlatform [data-pf="all"]')
+    pg.wait_for_timeout(250)
+
+    # 선택 영상 편집
+    pick_id = pg.evaluate('() => { const v = SV.state.trend.videos.find(v => v.title === "3천원으로 주방 정리 끝내기"); SV.trendPick(v.id); return v.id; }')
+    pg.wait_for_timeout(350)
+    check(pg.input_value('#tpTitle') == '3천원으로 주방 정리 끝내기', '선택 영상 제목 표시', pg.input_value('#tpTitle'))
+    check(pg.is_visible('#trendPickBody') and not pg.is_visible('#trendPickEmpty'), '선택 영상 편집 폼')
+    check(pg.eval_on_selector_all('#tpScore .sb-item', 'e=>e.length') == 5, '점수 계산 5항목')
+    pg.fill('#tpDesc', '설명 테스트')
+    pg.fill('#tpMemo', '첫 2초 훅이 좋다')
+    pg.wait_for_timeout(350)
+    savedMemo = pg.evaluate('() => SV.state.trend.videos.find(v => v.id === SV.state.trend.pickId).memo')
+    check(savedMemo == '첫 2초 훅이 좋다', '메모 저장')
+
+    # STT 결과 넣기
+    pg.evaluate("""() => { SV.state.stt.text = 'STT에서 가져온 자막 한 줄'; SV.state.stt.segments = []; }""")
+    pg.click('#btnTpStt')
+    pg.wait_for_timeout(350)
+    check(pg.input_value('#tpCaptions') == 'STT에서 가져온 자막 한 줄', 'STT 결과를 자막 칸에 넣기')
+
+    # 6종 벤치마킹 (모의 Gemini)
+    pg.evaluate('() => { SV.state.demo = false; SV.updateModeUI(); }')
+    mock['mode'] = 'bench'; mock['calls'].clear(); mock['bodies'].clear()
+    pg.click('#btnBenchRun')
+    pg.wait_for_function("() => SV.state.trend.bench && SV.state.trend.bench.hooks.length >= 6", timeout=15000)
+    pg.wait_for_timeout(400)
+    check(len(mock['calls']) == 1, '벤치마킹 Gemini 호출 1회', mock['calls'])
+    prompt = mock['bodies'][-1]['contents'][0]['parts'][0]['text']
+    check('6종 벤치마킹' in prompt and '3천원으로 주방 정리' in prompt, '선택 영상 정보로 프롬프트', prompt[:60])
+    check('STT에서 가져온 자막 한 줄' in prompt, '자막(STT)도 프롬프트에 포함')
+    check(pg.inner_text('#benchBadge').strip() == 'Gemini', 'Gemini 배지')
+    check(pg.eval_on_selector_all('#benchGrid .bench-item', 'e=>e.length') == 6, '6종 카드 6개')
+    bt = pg.evaluate('() => SV.state.trend.bench')
+    check(len(bt['hooks']) == 6 and len(bt['script']) == 5 and len(bt['scenes']) == 3 and len(bt['captions']) == 5 and bool(bt['cta']['text']), '6종 구조화 결과(후킹·대본·장면·자막·CTA)')
+    check('모의 분석' in bt['analysis']['summary'], '① 레퍼런스 분석 반영')
+    check(pg.inner_text('#benchGrid').count('모의') >= 5, '결과가 화면에 표시')
+
+    pg.click('[data-bench-copy="hooks"]')
+    pg.wait_for_timeout(250)
+    clip = pg.evaluate('async () => await navigator.clipboard.readText()')
+    check('모의 후킹 1' in clip, '후킹 복사')
+    with pg.expect_download(timeout=15000) as bj:
+        pg.click('#btnBenchJson')
+    jp = OUT / 'bench-test.json'
+    bj.value.save_as(str(jp))
+    bdata = json.loads(jp.read_text(encoding='utf-8'))
+    check(bj.value.suggested_filename.endswith('.json') and bdata['bench']['hooks'][0] == '모의 후킹 1', 'JSON 저장', bj.value.suggested_filename)
+    check(bdata['video']['score']['total'] > 0, 'JSON에 점수 포함')
+    with pg.expect_download(timeout=15000) as bm:
+        pg.click('#btnBenchMd')
+    mdp = OUT / 'bench-test.md'
+    bm.value.save_as(str(mdp))
+    mdt = mdp.read_text(encoding='utf-8')
+    check('## ⑥ 자막 및 CTA' in mdt and '| 초 | 장면 |' in mdt and '## ① 레퍼런스 분석' in mdt, 'MD 6종 모두 저장', bm.value.suggested_filename)
+
+    # 원클릭 전송
+    pg.click('[data-bench-send="hooks"]')
+    pg.wait_for_timeout(450)
+    check(state(pg, 'SV.state.view') == '3' and state(pg, 'SV.state.script.hooks.length') == 6, '③ 후킹 → 3단계 후킹 후보 6개')
+    check(pg.eval_on_selector_all('#hookChips .hook-chip', 'e=>e.length') == 6, '3단계 후킹 칩 6개 표시')
+    goto_view(pg, 'trend')
+    pg.wait_for_timeout(300)
+    pg.click('[data-bench-send="script"]')
+    pg.wait_for_timeout(450)
+    check(state(pg, 'SV.state.script.sentences.length') == 5 and state(pg, 'SV.state.script.sentences[0].text') == '모의 대본 1', '④ 대본 → 3단계 대본 5문장')
+    goto_view(pg, 'trend')
+    pg.wait_for_timeout(300)
+    pg.click('[data-bench-send="scenes"]')
+    pg.wait_for_timeout(450)
+    check(state(pg, 'SV.state.view') == '4' and state(pg, 'SV.state.scenes[0].label').startswith('모의 장면 1'), '⑤ 장면 → 4단계 장면 이름', state(pg, 'SV.state.scenes[0].label'))
+    goto_view(pg, 'trend')
+    pg.wait_for_timeout(300)
+    pg.click('[data-bench-send="captions"]')
+    pg.wait_for_timeout(450)
+    check(state(pg, 'SV.state.view') == '4' and state(pg, 'SV.state.script.sentences.length') == 5 and state(pg, 'SV.state.script.sentences[0].text') == '모의 자막 1', '⑥ 자막 → 4단계 자막 5줄')
+    check(state(pg, 'SV.state.subTl') is None, '벤치마킹 자막은 음성 길이 기준(STT 타이밍 없음)')
+
+    # 데모 벤치마킹
+    goto_view(pg, 'trend')
+    pg.wait_for_timeout(300)
+    pg.evaluate('() => { SV.state.demo = true; SV.updateModeUI(); }')
+    pg.click('#btnBenchRun')
+    pg.wait_for_timeout(700)
+    check(pg.inner_text('#benchBadge').strip() == '데모' and pg.eval_on_selector_all('#benchGrid .bench-item', 'e=>e.length') == 6, '키 없이 데모 6종 결과(표시됨)')
+    check(len(mock['calls']) == 1, '데모일 때는 API를 호출하지 않음', len(mock['calls']))
+
+    # 저장 유지용 상태
+    check(state(pg, 'SV.state.trend.videos.length') >= 11, '떡상 목록 누적', state(pg, 'SV.state.trend.videos.length'))
+    pg.evaluate('() => { localStorage.setItem("sv.mode.v1", JSON.stringify({demo:true})); }')
+
+    # =========================================================
     section('11. 레이아웃 · 데스크톱/모바일')
     pg.set_viewport_size({'width': 1440, 'height': 900})
     pg.wait_for_timeout(300)
@@ -1200,6 +1570,13 @@ with sync_playwright() as p:
     goto_step(pg, 4)
     pg.wait_for_timeout(500)
     pg.screenshot(path=str(SHOTS / 'test-run-step4.png'))
+    goto_view(pg, 'stt')
+    pg.wait_for_timeout(350)
+    pg.screenshot(path=str(SHOTS / 'test-run-stt.png'))
+    goto_view(pg, 'trend')
+    pg.wait_for_timeout(350)
+    pg.screenshot(path=str(SHOTS / 'test-run-trend.png'))
+    check(pg.evaluate('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1'), '데스크톱 떡상 화면 가로 오버플로 없음', pg.evaluate('() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]'))
     goto_step(pg, 0)
     pg.wait_for_timeout(400)
     pg.screenshot(path=str(SHOTS / 'desktop-step0.png'))
@@ -1217,7 +1594,7 @@ with sync_playwright() as p:
         w = pg.evaluate('() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]')
         if w[0] > w[1] + 1:
             bad.append((v, w))
-    check(not bad, '모바일 390 모든 화면(12개) 가로 오버플로 없음', bad)
+    check(not bad, '모바일 390 모든 화면(14개) 가로 오버플로 없음', bad)
     goto_step(pg, 1)
     pg.wait_for_timeout(250)
     pg.screenshot(path=str(SHOTS / 'mobile-step1.png'))
@@ -1236,6 +1613,18 @@ with sync_playwright() as p:
     goto_step(pg, 4)
     pg.wait_for_timeout(400)
     pg.screenshot(path=str(SHOTS / 'mobile-step4.png'))
+    goto_view(pg, 'stt')
+    pg.wait_for_timeout(300)
+    pg.screenshot(path=str(SHOTS / 'mobile-stt.png'))
+    cvr0 = pg.evaluate("""() => { const r=document.querySelector('#sttDrop').getBoundingClientRect(); return Math.round(r.width); }""")
+    check(cvr0 > 200, '모바일 STT 파일 영역 폭', cvr0)
+    goto_view(pg, 'trend')
+    pg.wait_for_timeout(300)
+    pg.screenshot(path=str(SHOTS / 'mobile-trend.png'))
+    tw = pg.evaluate("""() => { const w=document.querySelector('.trend-wrap'); return {sw:w.scrollWidth, cw:w.clientWidth}; }""")
+    check(tw['cw'] <= 390, '모바일 떡상 표는 안쪽에서 스크롤', tw)
+    goto_step(pg, 4)
+    pg.wait_for_timeout(250)
     cvr = pg.evaluate("""() => { const r=document.querySelector('#previewCanvas').getBoundingClientRect(); return [r.width, r.width/r.height]; }""")
     check(abs(cvr[1] - 9/16) < 0.02 and cvr[0] <= 300, '모바일 미리보기 9:16 · ≤300px', cvr)
     pg.click('#mNext')
@@ -1261,6 +1650,13 @@ with sync_playwright() as p:
     check(cov and cov['tz'] == 'Asia/Seoul' and cov['perDay'] == state(pg, 'SV.state.famous.perDay'), '유명 쇼츠 설정 유지', cov['tz'] if cov else None)
     cmulti = state(pg, 'JSON.parse(localStorage.getItem("sv.multi.v1"))')
     check(cmulti and len(cmulti['links']) == 2, '멀티 다운로더 목록 유지')
+    ctrend = state(pg, 'JSON.parse(localStorage.getItem("sv.trend.v1"))')
+    check(ctrend and len(ctrend['videos']) >= 11, '떡상 순위 목록 유지', len(ctrend['videos']) if ctrend else None)
+    check(ctrend and ctrend['bench'] and len(ctrend['bench']['hooks']) == 6, '6종 벤치마킹 결과 유지')
+    goto_view(pg, 'trend')
+    pg.wait_for_timeout(350)
+    check(pg.eval_on_selector_all('#trendTableBody tr', 'e=>e.length') >= 8, '새로고침 후 순위표 복원')
+    check(pg.eval_on_selector_all('#benchGrid .bench-item', 'e=>e.length') == 6, '새로고침 후 벤치마킹 복원')
     check('데모' in pg.inner_text('#modeBadge'), '데모 모드 설정 유지')
 
     # 마지막 콘솔/네트워크 점검

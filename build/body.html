@@ -45,6 +45,12 @@
     <button class="step-btn tool" type="button" data-view="eraser">
       <span class="num">▨</span><span class="lbl"><b>자막 지우개</b><span>원본 자막 가리기</span></span><span class="dot"></span>
     </button>
+    <button class="step-btn tool" type="button" data-view="stt">
+      <span class="num">🎙</span><span class="lbl"><b>음성→텍스트 (STT)</b><span>대본 · SRT 자막 추출</span></span><span class="dot"></span>
+    </button>
+    <button class="step-btn tool hot" type="button" data-view="trend">
+      <span class="num">🔥</span><span class="lbl"><b>떡상 순위 &amp; 벤치마킹</b><span>경쟁 채널 신호 · 6종</span></span><span class="dot"></span>
+    </button>
     <button class="step-btn tool hot" type="button" data-view="famous">
       <span class="num">🔥</span><span class="lbl"><b>유명 쇼츠 자동생성 및 업로드</b><span>화면 구성 · TOP N · 스케줄</span></span><span class="dot"></span>
     </button>
@@ -263,7 +269,7 @@
       </div>
 
       <div class="card">
-        <div class="card-head"><h3><span class="ico">✍️</span>대본 만들기</h3><span class="badge" id="scriptModeBadge">데모</span></div>
+        <div class="card-head"><h3><span class="ico">✍️</span>대본 만들기</h3><div class="row"><span class="badge" id="scriptModeBadge">데모</span><button class="btn xs ghost" type="button" data-go="stt">🎙️ 음성 파일에서 대본</button></div></div>
         <div class="stack">
           <div class="row">
             <span class="section-label" style="margin:0;min-width:44px">언어</span>
@@ -427,6 +433,10 @@
               <div class="ctrl"><label>색상</label>
                 <div class="row" style="gap:6px"><input type="color" id="capColor" value="#ffffff" aria-label="자막 색상"><input type="color" id="capStroke" value="#000000" aria-label="자막 외곽선 색상"><span class="hint" style="font-size:10px">글자·외곽선</span></div>
               </div>
+            </div>
+            <div class="row between hidden" id="subTlBar" style="margin-top:9px">
+              <span class="hint" id="subTlInfo">STT 타임스탬프로 자막을 보여줍니다.</span>
+              <button class="btn xs ghost" type="button" id="btnSubTlOff">STT 타이밍 해제</button>
             </div>
           </div>
 
@@ -856,6 +866,205 @@
       </div>
     </section>
 
+    <!-- ================= 도구 · 음성→텍스트 (STT) ================= -->
+    <section class="step-panel" id="panel-stt" data-view="stt">
+      <div class="panel-head">
+        <div class="eyebrow">도구 · 🎙️ 음성→텍스트 (STT)</div>
+        <h2>영상·음성에서 대본과 자막 뽑기</h2>
+        <p>올린 파일의 말을 그대로 받아써 대본 텍스트나 SRT 타임스탬프 자막으로 만듭니다. 결과는 직접 고칠 수 있고, 한 번에 복사·다운로드하거나 3단계 대본·4단계 자막으로 바로 보낼 수 있습니다.</p>
+      </div>
+
+      <div class="note"><span class="ico">ℹ️</span><div>브라우저에서는 연결된 Gemini 키로 음성 인식을 처리합니다. 로컬 Whisper는 PC 패키지(shorts-vending-pc)에서 지원합니다.</div></div>
+
+      <div class="edit-grid">
+        <div class="stack">
+          <div class="card tight">
+            <div class="card-head" style="margin-bottom:10px"><h3><span class="ico">📁</span>파일 올리기</h3><span class="badge" id="sttFileBadge">파일 없음</span></div>
+            <div class="drop" id="sttDrop" role="button" tabindex="0" aria-label="음성·영상 파일 선택">
+              <div class="big">🎧</div>
+              <b>여기로 음성·영상 파일을 끌어다 놓거나 클릭</b>
+              <span>MP3 · WAV · M4A · MP4 · WebM · MOV · 14MB 이하</span>
+            </div>
+            <input type="file" id="sttFileInput" accept="audio/*,video/*,.mp3,.wav,.m4a,.mp4,.webm,.mov,.ogg,.flac,.aac" class="sr-only">
+            <div class="file-list" id="sttFileInfo"></div>
+            <div class="ctrl-grid" style="margin-top:10px">
+              <div class="ctrl"><label for="sttLang">언어</label>
+                <select id="sttLang">
+                  <option value="auto" selected>자동 감지</option>
+                  <option value="ko">한국어</option>
+                  <option value="en">영어</option>
+                  <option value="ja">일본어</option>
+                </select>
+              </div>
+              <div class="ctrl"><label>출력 형식</label>
+                <div class="seg acc" id="segSttFormat" role="group" aria-label="출력 형식">
+                  <button type="button" data-v="text" class="on">대본 텍스트</button>
+                  <button type="button" data-v="srt">SRT 자막</button>
+                </div>
+              </div>
+            </div>
+            <div class="divider" style="margin:10px 0"></div>
+            <div class="row between">
+              <span class="hint" id="sttStatus">파일을 올리면 인식할 수 있습니다.</span>
+              <button class="btn primary" type="button" id="btnSttRun">🎧 음성 인식 시작</button>
+            </div>
+            <div class="prog" id="sttProg"><i id="sttBar"></i></div>
+            <div class="row" style="margin-top:8px">
+              <button class="btn xs ghost" type="button" id="btnSttSample">샘플로 화면 둘러보기</button>
+              <span class="hint">데모 모드이거나 키가 없으면 실제 인식 대신 <b>샘플</b>을 씁니다.</span>
+            </div>
+          </div>
+          <div class="note warn"><span class="ico">📦</span><div><b>용량 제한</b> — 파일을 base64로 실어 보내므로 원본 <b>14MB 이하</b>만 인식합니다(Gemini 요청 한도 20MB). 더 큰 파일은 PC 패키지의 Whisper STT로 처리하세요.</div></div>
+        </div>
+        <div class="stack">
+          <div class="card tight">
+            <div class="card-head" style="margin-bottom:8px"><h3><span class="ico">▶️</span>미리보기</h3><span class="badge" id="sttDurBadge">0.0s</span></div>
+            <div class="stt-stage">
+              <video id="sttVideo" class="hidden" controls playsinline preload="metadata"></video>
+              <audio id="sttAudio" class="hidden" controls preload="metadata"></audio>
+              <div class="stt-empty" id="sttEmpty"><span>🎬</span><b>아직 파일이 없습니다</b><span>왼쪽에서 음성·영상 파일을 올려 주세요.</span></div>
+            </div>
+            <p class="hint" id="sttMeta" style="margin-top:8px">올린 파일은 이 브라우저 안에서만 다뤄지고, 인식할 때만 Gemini로 전송됩니다.</p>
+          </div>
+          <div class="note" id="sttKeyNote"><span class="ico">🔑</span><div id="sttKeyNoteText">Gemini 키가 없어 실제 인식은 할 수 없습니다. ⚙️ 설정에서 키를 넣으면 바로 동작합니다.</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3><span class="ico">📄</span>인식 결과 <span class="badge" id="sttResultBadge">없음</span></h3>
+          <span class="hint" id="sttResultMeta">결과는 직접 고칠 수 있습니다 · 새로고침하면 사라집니다</span>
+        </div>
+        <textarea id="sttResult" class="stt-out" spellcheck="false" aria-label="음성 인식 결과" placeholder="인식 결과가 여기에 나옵니다. 직접 고쳐도 됩니다."></textarea>
+        <div class="row between" style="margin-top:8px">
+          <span class="hint" id="sttCount">0자 · 0줄</span>
+          <div class="row">
+            <button class="btn sm" type="button" id="btnSttCopy" disabled>📋 한 번에 복사</button>
+            <button class="btn sm ghost" type="button" id="btnSttTxt" disabled>⬇️ TXT 저장</button>
+            <button class="btn sm ghost" type="button" id="btnSttSrt" disabled>⬇️ SRT 저장</button>
+          </div>
+        </div>
+        <div class="divider" style="margin:11px 0"></div>
+        <div class="row between">
+          <div class="stack" style="gap:2px">
+            <b style="font-size:12.5px">바로 보내기</b>
+            <span class="hint" id="sttSendHint">3단계 대본은 문장으로, 4단계 자막은 자막 줄로 들어갑니다.</span>
+          </div>
+          <div class="row">
+            <button class="btn sm soft" type="button" id="btnSttToScript" disabled>📝 3단계 대본으로</button>
+            <button class="btn sm mint" type="button" id="btnSttToCaption" disabled>🅰️ 4단계 자막으로</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card tight hidden" id="sttSegCard">
+        <div class="card-head" style="margin-bottom:8px"><h3><span class="ico">⏱️</span>타임스탬프 <span class="badge" id="sttSegCount">0</span></h3><span class="hint">SRT 저장·4단계 자막에 쓰입니다</span></div>
+        <div class="timeline-wrap"><table class="timeline"><thead><tr><th>#</th><th>시작</th><th>끝</th><th>자막</th></tr></thead><tbody id="sttSegBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- ================= 도구 · 떡상 순위 & 6종 벤치마킹 ================= -->
+    <section class="step-panel" id="panel-trend" data-view="trend">
+      <div class="panel-head">
+        <div class="eyebrow">도구 · 🔥 떡상 순위 &amp; 6종 벤치마킹</div>
+        <h2>경쟁 채널 떡상 신호와 6종 벤치마킹</h2>
+        <p>차트 표를 붙여넣으면 구독자 대비 조회수 배율·순위 급등·업로드일로 떡상 점수를 계산해 순위표로 보여주고, 고른 영상으로 ①~⑥ 벤치마킹을 만들어 3·4단계로 보냅니다.</p>
+      </div>
+
+      <div class="note"><span class="ico">ℹ️</span><div>Playboard 실시간 자동 수집은 PC 패키지에서 지원하고, 웹앱은 <b>표 붙여넣기 · JSON/CSV 불러오기 · 직접 추가</b>로 동작합니다.</div></div>
+
+      <div class="card">
+        <div class="card-head"><h3><span class="ico">📥</span>차트 데이터 넣기</h3><div class="row"><span class="badge" id="trendCount">0개</span><button class="btn xs ghost" type="button" id="btnTrendSample">샘플 차트</button></div></div>
+        <div class="link-area">
+          <textarea id="trendInput" spellcheck="false" aria-label="Playboard 차트 표 또는 JSON/CSV" placeholder="Playboard 차트 표를 그대로 붙여넣으세요 (탭·쉼표 구분)&#10;순위\t채널\t영상 제목\t플랫폼\t구독자\t조회수\t좋아요\t업로드\t순위 변동&#10;1\t살림천재TV\t3천원으로 주방 정리\t유튜브\t18만\t412만\t8.9만\t2일 전\tNEW&#10;2\t먹방하는 수진\t편의점 신상 6종\t틱톡\t4.2만\t186만\t6.1만\t4일 전\t▲7"></textarea>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn sm" type="button" id="btnTrendParse">표 정리하기</button>
+          <button class="btn sm ghost" type="button" id="btnTrendFile">📂 JSON/CSV 불러오기</button>
+          <input type="file" id="trendFileInput" accept=".json,.csv,.tsv,.txt" class="sr-only">
+          <button class="btn sm ghost" type="button" id="btnTrendManual">＋ 영상 직접 추가</button>
+          <button class="btn sm danger" type="button" id="btnTrendClear">목록 비우기</button>
+          <span class="hint" id="trendStatus">열 이름(순위·채널·구독자·조회수)을 읽고, 없으면 순위·채널·구독자·조회수 순서로 봅니다.</span>
+        </div>
+        <div class="manual hidden" id="trendAddBox">
+          <div class="ctrl-grid">
+            <div class="ctrl wide"><label for="tNewTitle">영상 제목</label><input type="text" id="tNewTitle" placeholder="예: 3천원으로 주방 정리 끝내기"></div>
+            <div class="ctrl"><label for="tNewChannel">채널</label><input type="text" id="tNewChannel" placeholder="채널명"></div>
+            <div class="ctrl"><label for="tNewPlatform">플랫폼</label><select id="tNewPlatform"><option value="youtube">유튜브</option><option value="tiktok">틱톡</option><option value="instagram">인스타그램</option><option value="other">기타</option></select></div>
+            <div class="ctrl"><label for="tNewSubs">구독자</label><input type="text" id="tNewSubs" placeholder="18만"></div>
+            <div class="ctrl"><label for="tNewViews">조회수</label><input type="text" id="tNewViews" placeholder="412만"></div>
+            <div class="ctrl"><label for="tNewLikes">좋아요</label><input type="text" id="tNewLikes" placeholder="8.9만"></div>
+            <div class="ctrl"><label for="tNewDate">업로드</label><input type="text" id="tNewDate" placeholder="2일 전 또는 2026-11-20"></div>
+            <div class="ctrl"><label for="tNewMove">순위 변동</label><input type="text" id="tNewMove" placeholder="NEW · ▲7 · ▼3"></div>
+            <div class="ctrl wide"><button class="btn sm" type="button" id="btnTrendAdd">목록에 추가</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3><span class="ico">🔥</span>떡상 신호 순위</h3>
+          <div class="row">
+            <div class="seg" id="trendPlatform" role="group" aria-label="플랫폼 필터">
+              <button type="button" data-pf="all" class="on">전체</button>
+              <button type="button" data-pf="youtube">유튜브</button>
+              <button type="button" data-pf="tiktok">틱톡</button>
+              <button type="button" data-pf="instagram">인스타</button>
+            </div>
+            <select id="trendSort" aria-label="정렬">
+              <option value="score" selected>떡상 점수</option>
+              <option value="views">조회수</option>
+              <option value="ratio">구독자 대비 배율</option>
+              <option value="move">순위 급등</option>
+              <option value="date">최신 업로드</option>
+            </select>
+          </div>
+        </div>
+        <div class="row" style="margin-bottom:8px">
+          <div class="seg" id="segTrendFilter" role="group" aria-label="신호 필터">
+            <button type="button" data-v="all" class="on">전체</button>
+            <button type="button" data-v="new">NEW</button>
+            <button type="button" data-v="rise">순위 급등</button>
+            <button type="button" data-v="fresh">신작 급등</button>
+            <button type="button" data-v="reverse">구작 역주행</button>
+          </div>
+          <span class="hint" id="trendScoreHint">점수 = 배율 40 + 순위 25 + 업로드 15 + 참여 20 (100점)</span>
+        </div>
+        <div class="timeline-wrap trend-wrap">
+          <table class="timeline trend-table">
+            <thead><tr><th>#</th><th>영상</th><th>구독자</th><th>조회수</th><th>배율</th><th>순위</th><th>신호</th><th>점수</th></tr></thead>
+            <tbody id="trendTableBody"></tbody>
+          </table>
+        </div>
+        <div class="empty" id="trendEmpty">차트 표를 붙여넣고 「표 정리하기」를 누르거나 「샘플 차트」로 먼저 둘러보세요.</div>
+      </div>
+
+      <div class="card" id="trendPickCard">
+        <div class="card-head"><h3><span class="ico">🎯</span>선택 영상 <span class="badge" id="trendPickBadge">없음</span></h3><div class="row"><button class="btn xs ghost" type="button" id="btnTpStt">🎙️ STT 결과 넣기</button><button class="btn xs danger" type="button" id="btnTrendRemove">목록에서 빼기</button></div></div>
+        <div class="empty" id="trendPickEmpty">위 순위표에서 영상을 누르면 제목·설명·자막·메모를 여기서 확인하고 고칠 수 있습니다.</div>
+        <div class="hidden" id="trendPickBody">
+          <div class="ctrl-grid">
+            <div class="ctrl wide"><label for="tpTitle">영상 제목</label><input type="text" id="tpTitle" placeholder="영상 제목"></div>
+            <div class="ctrl wide"><label for="tpDesc">설명</label><textarea id="tpDesc" placeholder="영상 설명을 붙여넣으세요"></textarea></div>
+            <div class="ctrl wide"><label for="tpCaptions">공개 자막·대사 <em style="font-style:normal;color:var(--dim)">(STT 결과를 넣어도 됩니다)</em></label><textarea id="tpCaptions" placeholder="화면에 나온 자막이나 대사를 붙여넣으세요"></textarea></div>
+            <div class="ctrl wide"><label for="tpMemo">내 메모</label><textarea id="tpMemo" placeholder="왜 떴다고 보는지, 따라 할 부분, 피할 부분"></textarea></div>
+          </div>
+          <div class="score-box" id="tpScore"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3><span class="ico">🪄</span>6종 벤치마킹 <span class="badge" id="benchBadge">없음</span></h3><div class="row"><button class="btn primary sm" type="button" id="btnBenchRun">🪄 6종 벤치마킹 생성</button><button class="btn xs ghost" type="button" id="btnBenchClear">지우기</button></div></div>
+        <p class="hint" id="benchStatus">① 레퍼런스 분석 ② 콘텐츠 기획 ③ 후킹 문구 ④ 대본 ⑤ 장면별 구성 ⑥ 자막·CTA — 선택 영상의 정보로 Gemini가 구조화해 만듭니다.</p>
+        <div class="row" style="margin-top:8px">
+          <button class="btn sm ghost" type="button" id="btnBenchCopyAll">📋 전체 복사</button>
+          <button class="btn sm ghost" type="button" id="btnBenchJson">⬇️ JSON 저장</button>
+          <button class="btn sm ghost" type="button" id="btnBenchMd">⬇️ MD 저장</button>
+        </div>
+        <div class="bench-grid" id="benchGrid"></div>
+        <div class="empty" id="benchEmpty">영상을 고르고 「6종 벤치마킹 생성」을 누르면 ①~⑥ 결과가 여기에 나옵니다.</div>
+      </div>
+    </section>
   </main>
 
   <!-- ================= PREVIEW ================= -->

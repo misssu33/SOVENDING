@@ -43,7 +43,7 @@
   const LS = {
     keys: 'sv.keys.v1', preset: 'sv.preset.v1', coupang: 'sv.coupang.v1',
     hist: 'sv.hist.v1', mode: 'sv.mode.v1', work: 'sv.work.v1',
-    accounts: 'sv.accounts.v1', famous: 'sv.famous.v1', multi: 'sv.multi.v1'
+    accounts: 'sv.accounts.v1', famous: 'sv.famous.v1', multi: 'sv.multi.v1', trend: 'sv.trend.v1'
   };
   function lsGet(key, fb) {
     try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fb; } catch (e) { return fb; }
@@ -88,6 +88,9 @@
     },
     multi: { links: [] },
     eraser: { fileId: '', t: 0, x: 18, y: 58, w: 64, h: 18, mode: 'blur', strength: 18 },
+    stt: { file: null, url: '', mime: '', video: false, dur: 0, lang: 'auto', format: 'text', text: '', segments: [], sample: false, busy: false, error: '' },
+    trend: { videos: [], sort: 'score', filter: 'all', platform: 'all', pickId: '', bench: null, benchDemo: false, benchAt: 0 },
+    subTl: null,
     activity: [],
     style: {
       blurOn: true, blurMode: 'blur', blurY: 55, blurH: 18, blurStrength: 18,
@@ -1363,6 +1366,7 @@
       }
       const totalEnd = timeline.length ? timeline[timeline.length - 1].end : 0;
       state.voice = { mode, voice, speed, gap, timeline, total: totalEnd, buffers };
+      if (state.subTl && state.subTl.length) { state.subTl = null; updateSubTlUI(); toast('음성을 만들었으므로 STT 타이밍을 끄고 음성 기준으로 바꿨습니다'); }
       renderTimeline();
       ensurePreview();
       status.textContent = (mode === 'gemini' ? 'Gemini TTS · ' + voiceInfo(voice).name : mode === 'mixed' ? '일부 Gemini · 나머지 합성음' : '브라우저 합성음 · ' + voiceInfo(voice).name) + ' · 문장 사이 ' + gapLabel(gap) + ' · ' + timeline.length + '문장 · ' + totalEnd.toFixed(1) + '초 (실측)';
@@ -1516,6 +1520,7 @@
 
   /* ---------------- preview timeline ---------------- */
   function previewTimeline() {
+    if (state.subTl && state.subTl.length) return state.subTl;
     if (state.voice) return state.voice.timeline;
     if (!state.script) return [];
     const gap = state.voiceGap;
@@ -1530,7 +1535,7 @@
   function totalDuration() { const tl = previewTimeline(); return tl.length ? tl[tl.length - 1].end : 0; }
   function indexAt(t) {
     const tl = previewTimeline();
-    const gap = state.voice && state.voice.gap != null ? state.voice.gap : state.voiceGap;
+    const gap = (state.subTl && state.subTl.length) ? 0 : (state.voice && state.voice.gap != null ? state.voice.gap : state.voiceGap);
     for (const row of tl) { if (t >= row.start && t < row.end + gap) return row.i; }
     return tl.length ? tl[tl.length - 1].i : -1;
   }
@@ -1784,13 +1789,13 @@
     const iScenes = $('#infoScenes'); if (iScenes) iScenes.textContent = String(state.scenes.filter(s => !s.muted).length);
     const iBlur = $('#infoBlur'); if (iBlur) iBlur.textContent = st.blurOn ? (st.blurMode === 'mosaic' ? '모자이크 ' : '블러 ') + st.blurStrength + 'px' : '꺼짐';
     const iAd = $('#infoAd'); if (iAd) iAd.textContent = st.ad === 'off' ? '없음' : st.ad === 'coupang' ? '쿠팡 파트너스' : '(광고)';
-    const iLen = $('#infoLen'); if (iLen) iLen.textContent = (state.voice ? state.voice.total : totalDuration()).toFixed(1) + 's';
+    const iLen = $('#infoLen'); if (iLen) iLen.textContent = totalDuration().toFixed(1) + 's';
   }
 
   async function togglePreview() {
     if (PV.playing) { stopPlayback(); return; }
     if (!state.script || !state.script.sentences.length) { toast('먼저 3단계에서 대본을 만들어 주세요', 'bad'); return; }
-    if (!state.voice) {
+    if (!state.voice && !(state.subTl && state.subTl.length)) {
       await buildVoice();
       if (!state.voice) return;
     }
@@ -1814,7 +1819,8 @@
     const ac = getAC();
     stopSources();
     const now = ac.currentTime + 0.06;
-    (state.voice ? state.voice.timeline : []).forEach((row, i) => {
+    const srtOnly = !!(state.subTl && state.subTl.length);
+    (!srtOnly && state.voice ? state.voice.timeline : []).forEach((row, i) => {
       if (row.end <= from) return;
       const src = ac.createBufferSource();
       src.buffer = state.voice.buffers[i];
@@ -1973,14 +1979,15 @@
     if (exporting) { toast('이미 내보내는 중입니다'); return; }
     if (!state.script || !state.script.sentences.length) { toast('먼저 3단계에서 대본을 만들어 주세요', 'bad'); return; }
     if (!window.MediaRecorder) { toast('이 브라우저는 MediaRecorder를 지원하지 않습니다', 'bad'); return; }
-    if (!state.voice) {
+    const srtOnly = !!(state.subTl && state.subTl.length);
+    if (!state.voice && !srtOnly) {
       await buildVoice();
       if (!state.voice) return;
     }
     exporting = true;
     stopPlayback();
     const W = 540, H = 960, fps = 30;
-    const dur = state.voice.total;
+    const dur = totalDuration();
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     cv.style.cssText = 'position:fixed;left:-10000px;top:0;width:540px;height:960px';
     document.body.appendChild(cv);
@@ -2005,14 +2012,16 @@
     if (recBadge) recBadge.classList.add('on');
     ['#btnExport', '#btnExportMini', '#btnPlay'].forEach(s => { const b = $(s); if (b) b.disabled = true; });
 
-    // 오디오 스케줄
+    // 오디오 스케줄 (STT 타이밍만 쓸 때는 TTS 음성을 내보내지 않는다)
     const startAt = ac.currentTime + 0.18;
     const sources = [];
-    state.voice.timeline.forEach((row, i) => {
-      const src = ac.createBufferSource(); src.buffer = state.voice.buffers[i];
-      const g = ac.createGain(); g.gain.value = 1; src.connect(g); g.connect(dest);
-      try { src.start(startAt + row.start); sources.push(src); } catch (e) {}
-    });
+    if (!srtOnly && state.voice) {
+      state.voice.timeline.forEach((row, i) => {
+        const src = ac.createBufferSource(); src.buffer = state.voice.buffers[i];
+        const g = ac.createGain(); g.gain.value = 1; src.connect(g); g.connect(dest);
+        try { src.start(startAt + row.start); sources.push(src); } catch (e) {}
+      });
+    }
     if (state.style.bgm !== 'none' && state.style.bgmVol > 0) {
       const buf = bgmBuffer(state.style.bgm, Math.max(2, dur));
       if (buf) {
@@ -2063,7 +2072,7 @@
     if (timeEl) timeEl.textContent = '100%';
     const info = $('#exportInfo');
     /* 내보내기 정보는 아래에서 채운다 */
-    if (info) info.textContent = '540×960 WebM · ' + dur.toFixed(1) + '초 · 음성 ' + (state.voice.mode === 'gemini' ? 'Gemini TTS' : '합성음') + ' 포함';
+    if (info) info.textContent = '540×960 WebM · ' + dur.toFixed(1) + '초 · ' + (srtOnly ? '자막 타이밍(STT) · TTS 음성 없음' : '음성 ' + (state.voice && state.voice.mode === 'gemini' ? 'Gemini TTS' : '합성음') + ' 포함');
     state.exported++;
     addHistoryFromProduct(true);
     logActivity('⬇️', 'WebM 내보내기 · ' + dur.toFixed(1) + '초 · ' + (blob.size / 1048576).toFixed(2) + 'MB');
@@ -2994,9 +3003,1015 @@
 
   /* ---------------- navigation / progress ---------------- */
   const STEP_LABEL = ['설정', '링크 넣기', '비슷한 제품', '대본·음성', '자동 편집', '썸네일·제목', '다뿌려 업로드', '쿠팡 파트너스'];
-  const VIEW_ORDER = ['perf', '1', '2', '3', '4', '5', '6', 'multi', 'eraser', 'famous', 'settings', 'coupang'];
+  const VIEW_ORDER = ['perf', '1', '2', '3', '4', '5', '6', 'multi', 'eraser', 'stt', 'trend', 'famous', 'settings', 'coupang'];
   const VIEW_NUM = { settings: 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, coupang: 7 };
-  const VIEW_NAME = { perf: '내 성과', multi: '멀티 다운로더', eraser: '자막 지우개', famous: '유명 쇼츠', settings: '설정', coupang: '쿠팡 파트너스' };
+  const VIEW_NAME = { perf: '내 성과', multi: '멀티 다운로더', eraser: '자막 지우개', stt: '음성→텍스트 · STT', trend: '떡상 순위 · 벤치마킹', famous: '유명 쇼츠', settings: '설정', coupang: '쿠팡 파트너스' };
+
+  /* =========================================================
+     도구 · 음성→텍스트 (STT) — Gemini 멀티모달 오디오 입력
+     ========================================================= */
+  const STT_MAX = 14 * 1024 * 1024;              // base64 33% 증가 + 요청 20MB 한도
+  const STT_EXT = /\.(mp3|m4a|wav|ogg|oga|flac|aac|opus|mpga|mp4|webm|mov|m4v|mpg|mpeg)$/i;
+  const STT_LANG_NAME = { auto: '파일에서 들리는 언어 그대로', ko: '한국어', en: '영어', ja: '일본어' };
+  const STT_SAMPLE_TEXT = [
+    '이 제품 진짜 써 봤는데 생각보다 훨씬 좋았어요.',
+    '먼저 물기만 닦아도 윤기가 남는 게 신기했어요.',
+    '일주일 써 보니 손이 자주 가는 이유를 알겠더라고요.',
+    '가격 생각하면 이 정도면 충분하다 싶었습니다.',
+    '궁금하면 고정댓글 링크 확인해 보세요.'
+  ].join('\n');
+  const STT_SAMPLE_SEGS = [
+    { start: 0.0, end: 2.6, text: '이 제품 진짜 써 봤는데' },
+    { start: 2.6, end: 5.4, text: '생각보다 훨씬 좋았어요' },
+    { start: 5.6, end: 8.9, text: '먼저 물기만 닦아도 윤기가 남는 게 신기했어요' },
+    { start: 9.1, end: 12.4, text: '일주일 써 보니 손이 자주 가는 이유를 알겠더라고요' },
+    { start: 12.6, end: 15.2, text: '가격 생각하면 이 정도면 충분하다 싶었습니다' },
+    { start: 15.4, end: 17.8, text: '궁금하면 고정댓글 링크 확인해 보세요' }
+  ];
+
+  function sttMimeOf(file) {
+    const n = String(file.name || '').toLowerCase();
+    const t = String(file.type || '');
+    if (/\.mp3$/.test(n) || /mpeg/.test(t)) return 'audio/mp3';
+    if (/\.wav$/.test(n) || /wav/.test(t)) return 'audio/wav';
+    if (/\.m4a$/.test(n)) return 'audio/mp4';
+    if (/\.aac$/.test(n)) return 'audio/aac';
+    if (/\.(ogg|oga|opus)$/.test(n) || /ogg|opus/.test(t)) return 'audio/ogg';
+    if (/\.flac$/.test(n)) return 'audio/flac';
+    if (/\.mp4$/.test(n) || /mp4/.test(t)) return 'video/mp4';
+    if (/\.mov$/.test(n) || /quicktime/.test(t)) return 'video/mov';
+    if (/\.webm$/.test(n) || /webm/.test(t)) return 'video/webm';
+    if (/\.(mpg|mpeg)$/.test(n)) return 'video/mpeg';
+    return /^audio\//.test(t) ? t : 'video/mp4';
+  }
+  function sttSizeText(n) {
+    n = Number(n) || 0;
+    return n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB';
+  }
+  function sttReady() { return !state.demo && realKeys().length > 0; }
+
+  function sttSetFile(file) {
+    if (!file) return false;
+    const st = state.stt;
+    const okName = STT_EXT.test(file.name || '') || /^(audio|video)\//.test(file.type || '');
+    if (!okName) {
+      st.error = '음성·영상 파일만 올릴 수 있습니다 (mp3 · wav · m4a · mp4 · webm · mov).';
+      renderStt(); toast('음성·영상 파일을 선택해 주세요', 'bad'); return false;
+    }
+    if (file.size > STT_MAX) {
+      st.error = '파일이 ' + sttSizeText(file.size) + '로 14MB를 넘습니다. Gemini 요청 한도(20MB) 때문에 인식할 수 없으니, PC 패키지의 Whisper STT로 처리하세요.';
+      renderStt(); toast('14MB가 넘는 파일은 인식할 수 없습니다', 'bad'); return false;
+    }
+    if (st.url) { try { URL.revokeObjectURL(st.url); } catch (e) {} }
+    st.file = { name: file.name, size: file.size, type: file.type, raw: file };
+    st.url = URL.createObjectURL(file);
+    st.mime = sttMimeOf(file);
+    st.video = /^video\//.test(st.mime);
+    st.dur = 0; st.text = ''; st.segments = []; st.sample = false; st.error = ''; st.busy = false;
+    const v = $('#sttVideo'), a = $('#sttAudio'), empty = $('#sttEmpty');
+    const el = st.video ? v : a, other = st.video ? a : v;
+    if (v) { try { v.pause(); } catch (e) {} v.removeAttribute('src'); }
+    if (a) { try { a.pause(); } catch (e) {} a.removeAttribute('src'); }
+    if (other) other.classList.add('hidden');
+    if (empty) empty.classList.add('hidden');
+    if (el) {
+      el.classList.remove('hidden');
+      el.src = st.url;
+      el.onloadedmetadata = () => { st.dur = isFinite(el.duration) ? el.duration : 0; renderStt(); };
+      el.onerror = () => { st.error = '브라우저가 이 파일을 재생하지 못했습니다. mp3·wav·m4a로 바꾸거나 PC 패키지를 쓰세요.'; renderStt(); };
+    }
+    toast('파일을 올렸습니다 · ' + file.name, 'good');
+    renderStt();
+    return true;
+  }
+
+  function sttBase64(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => { const s = String(fr.result || ''); const i = s.indexOf(','); resolve(i >= 0 ? s.slice(i + 1) : ''); };
+      fr.onerror = () => reject(new Error('파일을 읽지 못했습니다'));
+      fr.readAsDataURL(file);
+    });
+  }
+
+  function sttPrompt(lang, format) {
+    const lines = [
+      '너는 음성 받아쓰기(STT) 엔진이다. 첨부한 오디오/영상 파일의 말을 그대로 받아쓴다.',
+      '번역·요약·의역·추측 금지. 들리지 않는 말을 지어내지 마라. 말소리가 없으면 SPEECH_NOT_FOUND 한 줄만 출력한다.',
+      '언어: ' + (STT_LANG_NAME[lang] || STT_LANG_NAME.auto) + '.'
+    ];
+    if (format === 'srt') {
+      lines.push('출력: SRT 자막 형식만. 각 자막은 1) 번호 2) 00:00:00,000 --> 00:00:02,400 3) 자막 한 줄 순서로 쓰고, 자막 사이는 빈 줄로 구분한다.');
+      lines.push('자막 한 줄은 20자 안팎으로 끊고, 타임스탬프는 실제로 말한 시각을 밀리초 3자리(쉼표)로 적는다.');
+    } else {
+      lines.push('출력: 순수 텍스트만. 한 문장마다 줄바꿈. 번호·타임스탬프·머리말 금지.');
+    }
+    return lines.join('\n');
+  }
+
+  /* SRT 파서 — "00:00:01,200 --> 00:00:03,400" / 마침표 표기 모두 허용 */
+  function sttParseSRT(text) {
+    const lines = String(text || '').replace(/\r/g, '').split('\n');
+    const T = /^\s*(?:\d+\s*)?(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})/;
+    const sec = (h, m, s, ms) => (+h) * 3600 + (+m) * 60 + (+s) + Number('0.' + String(ms || '0').padEnd(3, '0'));
+    const out = [];
+    let cur = null;
+    lines.forEach(ln => {
+      const m = ln.match(T);
+      if (m) {
+        if (cur && cur.text.trim()) out.push(cur);
+        cur = { start: sec(m[1], m[2], m[3], m[4]), end: sec(m[5], m[6], m[7], m[8]), text: '' };
+        return;
+      }
+      if (!cur) return;
+      const t = ln.trim();
+      if (!t) { if (cur.text.trim()) { out.push(cur); cur = null; } return; }
+      if (/^\d{1,4}$/.test(t)) return;                 // 큐 번호 줄
+      cur.text += (cur.text ? ' ' : '') + t;
+    });
+    if (cur && cur.text.trim()) out.push(cur);
+    return out.filter(s => s.text && s.end > s.start)
+      .map((s, i) => ({ i, start: s.start, end: s.end, dur: s.end - s.start, text: s.text.replace(/<[^>]+>/g, '').trim() }));
+  }
+
+  function sttSrtTime(sec) {
+    sec = Math.max(0, Number(sec) || 0);
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+    const ms = Math.round((sec - Math.floor(sec)) * 1000);
+    return pad(h) + ':' + pad(m) + ':' + pad(s) + ',' + String(ms).padStart(3, '0');
+  }
+  function sttFormatSRT(segs) {
+    return (segs || []).map((x, i) => (i + 1) + '\n' + sttSrtTime(x.start) + ' --> ' + sttSrtTime(x.end) + '\n' + String(x.text || '').trim()).join('\n\n') + '\n';
+  }
+
+  /* 긴 글 → 대본 문장 (문장부호 기준, 너무 길면 쉼표/길이로 나눔) */
+  function sttSplitSentences(text) {
+    const raw = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return [];
+    const parts = raw.split(/(?<=[.!?。！？])\s+/).map(s => s.trim()).filter(Boolean);
+    const out = [];
+    parts.forEach(p => {
+      if (p.length <= 70) { out.push(p); return; }
+      const chunks = p.split(/(?<=[,，、])\s*/);
+      let cur = '';
+      chunks.forEach(c => {
+        if (!cur) cur = c;
+        else if ((cur + ' ' + c).length <= 45) cur += ' ' + c;
+        else { out.push(cur.trim()); cur = c; }
+      });
+      if (cur.trim()) out.push(cur.trim());
+    });
+    return out.filter(Boolean).slice(0, 40);
+  }
+  /* 자막 한 줄 길이로 나누기 */
+  function sttSplitCaptions(text, max) {
+    const limit = max || 22;
+    const words = String(text || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    const out = []; let cur = '';
+    words.forEach(w => {
+      if (!cur) cur = w;
+      else if ((cur + ' ' + w).length <= limit) cur += ' ' + w;
+      else { out.push(cur); cur = w; }
+      while (cur.length > limit * 2) { out.push(cur.slice(0, limit)); cur = cur.slice(limit); }
+    });
+    if (cur) out.push(cur);
+    return out.slice(0, 80);
+  }
+
+  function ensureScriptShell() {
+    if (!state.script) state.script = { lang: 'ko', tone: 'friendly', length: 'normal', titles: ['', ''], highlights: [], hooks: [], sentences: [], demo: false };
+    if (!Array.isArray(state.script.titles)) state.script.titles = ['', ''];
+    while (state.script.titles.length < 2) state.script.titles.push('');
+    if (!Array.isArray(state.script.highlights)) state.script.highlights = [];
+    if (!Array.isArray(state.script.hooks)) state.script.hooks = [];
+    if (!Array.isArray(state.script.sentences)) state.script.sentences = [];
+    return state.script;
+  }
+
+  function updateSubTlUI() {
+    const on = !!(state.subTl && state.subTl.length);
+    const bar = $('#subTlBar'), info = $('#subTlInfo');
+    if (bar) bar.classList.toggle('hidden', !on);
+    if (info && on) {
+      const last = state.subTl[state.subTl.length - 1];
+      info.textContent = 'STT 타임스탬프 ' + state.subTl.length + '줄 · ' + (last.end || 0).toFixed(1) + '초까지 이 타이밍으로 자막을 보여줍니다' + (state.voice ? ' (음성은 잠시 꺼짐)' : '');
+    }
+  }
+
+  function renderStt() {
+    const st = state.stt;
+    const badge = $('#sttFileBadge');
+    if (badge) badge.textContent = st.file ? st.file.name : '파일 없음';
+    const info = $('#sttFileInfo');
+    if (info) {
+      info.innerHTML = st.file
+        ? '<div class="file-item"><span style="font-size:16px">' + (st.video ? '🎬' : '🎧') + '</span><div class="meta"><b>' + esc(st.file.name) + '</b>' +
+          '<span>' + sttSizeText(st.file.size) + ' · ' + esc(st.mime) + ' · ' + (st.dur ? st.dur.toFixed(1) + '초' : '길이 확인 중') + '</span></div>' +
+          '<button class="btn xs danger" type="button" data-stt-remove="1" title="파일 빼기">✕</button></div>'
+        : '';
+    }
+    const dur = $('#sttDurBadge'); if (dur) dur.textContent = (st.dur ? st.dur.toFixed(1) : '0.0') + 's';
+    const run = $('#btnSttRun');
+    if (run) {
+      run.disabled = !st.file || st.busy;
+      run.innerHTML = st.busy ? '<span class="spin"></span> 인식 중' : '🎧 음성 인식 시작';
+    }
+    const status = $('#sttStatus');
+    if (status) {
+      status.textContent = st.busy ? 'Gemini가 음성을 받아쓰는 중… 파일이 크면 1~2분 걸립니다.'
+        : st.error ? st.error
+        : st.text ? '결과 ' + st.text.length + '자' + (st.segments.length ? ' · 자막 ' + st.segments.length + '줄' : '') + (st.sample ? ' · 샘플' : '')
+        : st.file ? '「음성 인식 시작」을 누르면 받아씁니다.' : '파일을 올리면 인식할 수 있습니다.';
+    }
+    const badgeR = $('#sttResultBadge');
+    if (badgeR) {
+      badgeR.textContent = st.sample ? '샘플' : st.text ? '완료' : '없음';
+      badgeR.className = 'badge ' + (st.sample ? 'demo' : st.text ? 'live' : '');
+    }
+    const ta = $('#sttResult');
+    if (ta && document.activeElement !== ta) ta.value = st.text || '';
+    if (ta) ta.classList.toggle('srt', /-->/.test(st.text || ''));
+    const cnt = $('#sttCount');
+    if (cnt) cnt.textContent = (st.text || '').length + '자 · ' + ((st.text || '').split('\n').filter(l => l.trim()).length) + '줄';
+    const setDis = (sel, v) => { const b = $(sel); if (b) b.disabled = !!v; };
+    setDis('#btnSttCopy', !st.text);
+    setDis('#btnSttTxt', !st.text);
+    setDis('#btnSttSrt', !(st.segments && st.segments.length));
+    setDis('#btnSttToScript', !st.text);
+    setDis('#btnSttToCaption', !st.text);
+    const sh = $('#sttSendHint');
+    if (sh) {
+      const nS = st.segments.length ? st.segments.length : sttSplitCaptions(st.text, 22).length;
+      const nScript = st.segments.length ? st.segments.length : sttSplitSentences(st.text).length;
+      sh.textContent = st.text ? '3단계 대본은 문장 ' + nScript + '개, 4단계 자막은 ' + nS + '줄로 들어갑니다.' : '3단계 대본은 문장으로, 4단계 자막은 자막 줄로 들어갑니다.';
+    }
+    const keyNote = $('#sttKeyNoteText');
+    if (keyNote) {
+      keyNote.textContent = sttReady()
+        ? 'Gemini 키 ' + realKeys().length + '개로 실제 인식합니다 (gemini-2.5-flash · 한도가 찬 키는 자동 전환).'
+        : realKeys().length ? '데모 모드가 켜져 있어 실제 인식 대신 샘플을 씁니다. ⚙️ 설정에서 데모 모드를 끄면 실제 인식합니다.'
+        : 'Gemini 키가 없어 실제 인식은 할 수 없습니다. ⚙️ 설정에서 키를 넣으면 바로 동작합니다 (키 없이도 샘플로 화면을 볼 수 있습니다).';
+    }
+    const segCard = $('#sttSegCard'), segBody = $('#sttSegBody'), segCnt = $('#sttSegCount');
+    if (segCard) segCard.classList.toggle('hidden', !(st.segments && st.segments.length));
+    if (segCnt) segCnt.textContent = String((st.segments || []).length);
+    if (segBody) segBody.innerHTML = (st.segments || []).slice(0, 80).map((s, i) =>
+      '<tr><td class="num">' + pad(i + 1) + '</td><td class="num">' + s.start.toFixed(1) + 's</td><td class="num">' + s.end.toFixed(1) + 's</td><td>' + esc(s.text) + '</td></tr>').join('');
+  }
+
+  async function sttRun() {
+    const st = state.stt;
+    if (!st.file || !st.file.raw) { toast('먼저 음성·영상 파일을 올려 주세요', 'bad'); return; }
+    if (st.busy) return;
+    if (!sttReady()) {
+      st.error = realKeys().length ? '데모 모드가 켜져 있어 실제 인식은 하지 않습니다. ⚙️ 설정에서 데모 모드를 끄세요.' : 'Gemini 키가 없어 실제 인식은 할 수 없습니다. ⚙️ 설정에서 키를 넣으세요.';
+      renderStt(); toast(st.error, 'bad'); return;
+    }
+    st.busy = true; st.error = ''; st.sample = false;
+    st.text = ''; st.segments = [];
+    const prog = $('#sttProg'), bar = $('#sttBar');
+    if (prog) prog.classList.add('on');
+    if (bar) bar.style.width = '8%';
+    renderStt();
+    try {
+      const b64 = await sttBase64(st.file.raw);
+      if (!b64) throw new Error('파일을 읽지 못했습니다');
+      if (bar) bar.style.width = '32%';
+      const body = {
+        contents: [{ parts: [{ text: sttPrompt(st.lang, st.format) }, { inlineData: { mimeType: st.mime, data: b64 } }] }],
+        generationConfig: { temperature: 0, maxOutputTokens: 8192 }
+      };
+      const data = await geminiCall('gemini-2.5-flash', body, { timeout: 180000, tag: 'stt' });
+      if (bar) bar.style.width = '88%';
+      const raw = geminiText(data);
+      if (!raw) throw new Error('인식 결과가 비어 있습니다 (말소리가 없는 파일일 수 있습니다)');
+      if (/SPEECH_NOT_FOUND/i.test(raw)) throw new Error('이 파일에서 말소리를 찾지 못했습니다');
+      st.text = raw.trim();
+      st.segments = sttParseSRT(st.text);
+      if (st.format === 'srt' && !st.segments.length) st.error = 'SRT 형식이 아닌 응답이 왔습니다. 결과를 확인하고 「SRT 자막」으로 다시 인식해 보세요.';
+      if (bar) bar.style.width = '100%';
+      toast('음성 인식 완료 · ' + st.text.length + '자' + (st.segments.length ? ' · 자막 ' + st.segments.length + '줄' : ''), 'good');
+      logActivity('🎙️', '음성 인식 · ' + st.file.name + ' · ' + st.text.length + '자' + (st.segments.length ? ' · 자막 ' + st.segments.length + '줄' : ''));
+    } catch (e) {
+      const msg = errMsg(e);
+      st.error = '인식 실패: ' + msg + (/한도|quota|429/i.test(msg) ? ' · 키를 바꾸거나 내일 다시 시도하세요' : '');
+      toast('음성 인식 실패: ' + msg, 'bad');
+    } finally {
+      st.busy = false;
+      if (prog) setTimeout(() => { prog.classList.remove('on'); if (bar) bar.style.width = '0%'; }, 500);
+      renderStt();
+    }
+  }
+
+  function sttRemoveFile() {
+    const st = state.stt;
+    if (st.url) { try { URL.revokeObjectURL(st.url); } catch (e) {} }
+    ['#sttVideo', '#sttAudio'].forEach(sel => {
+      const el = $(sel);
+      if (!el) return;
+      try { el.pause(); } catch (e) {}
+      el.removeAttribute('src');
+      el.classList.add('hidden');
+    });
+    const empty = $('#sttEmpty'); if (empty) empty.classList.remove('hidden');
+    state.stt = { file: null, url: '', mime: '', video: false, dur: 0, lang: st.lang, format: st.format, text: '', segments: [], sample: false, busy: false, error: '' };
+    renderStt();
+    toast('파일을 뺐습니다');
+  }
+
+  function sttSample() {
+    const st = state.stt;
+    st.sample = true; st.error = '';
+    st.segments = STT_SAMPLE_SEGS.map((s, i) => ({ i, start: s.start, end: s.end, dur: s.end - s.start, text: s.text }));
+    st.text = st.format === 'srt' ? sttFormatSRT(st.segments) : STT_SAMPLE_TEXT;
+    renderStt();
+    toast('샘플 결과를 채웠습니다 — 실제 음성 인식이 아닙니다');
+  }
+
+  function sttPlainText() {
+    const st = state.stt;
+    if (!st.text) return '';
+    return (st.segments && st.segments.length) ? st.segments.map(s => s.text).join('\n') : st.text;
+  }
+  function sttStamp() { return new Date().toISOString().slice(0, 10); }
+  function sttDownloadTxt() {
+    const t = sttPlainText();
+    if (!t) { toast('저장할 결과가 없습니다', 'bad'); return; }
+    downloadText('stt-' + sttStamp() + '.txt', t, 'text/plain;charset=utf-8');
+    toast('TXT로 저장했습니다', 'good');
+  }
+  function sttDownloadSrt() {
+    const st = state.stt;
+    const segs = (st.segments && st.segments.length) ? st.segments : sttParseSRT(st.text);
+    if (!segs.length) { toast('타임스탬프가 없어 SRT를 만들 수 없습니다 · 「SRT 자막」으로 인식하세요', 'bad'); return; }
+    downloadText('stt-' + sttStamp() + '.srt', sttFormatSRT(segs), 'application/x-subrip;charset=utf-8');
+    toast('SRT로 저장했습니다 · ' + segs.length + '줄', 'good');
+  }
+
+  function sttToScript() {
+    const st = state.stt;
+    if (!st.text) { toast('보낼 인식 결과가 없습니다', 'bad'); return; }
+    const sents = (st.segments && st.segments.length)
+      ? st.segments.map(s => String(s.text || '').trim()).filter(Boolean)
+      : sttSplitSentences(st.text);
+    if (!sents.length) { toast('보낼 인식 결과가 없습니다', 'bad'); return; }
+    const s = ensureScriptShell();
+    s.sentences = sents.map(text => ({ text }));
+    s.demo = st.sample; s.source = 'stt';
+    state.voice = null;
+    state.subTl = null;
+    renderScript(); renderTimeline(); buildScenes(); ensurePreview(); updateSubTlUI();
+    goView('3');
+    toast('3단계 대본을 음성 인식 ' + sents.length + '문장으로 바꿨습니다', 'good');
+    logActivity('🎙️', 'STT → 3단계 대본 ' + sents.length + '문장');
+  }
+
+  function sttToCaption() {
+    const st = state.stt;
+    if (!st.text) { toast('보낼 인식 결과가 없습니다', 'bad'); return; }
+    const segs = (st.segments && st.segments.length) ? st.segments : [];
+    const lines = segs.length ? segs.map(s => s.text) : sttSplitCaptions(st.text, 22);
+    if (!lines.length) { toast('보낼 자막이 없습니다', 'bad'); return; }
+    const s = ensureScriptShell();
+    s.sentences = lines.map(text => ({ text }));
+    s.demo = st.sample; s.source = 'stt';
+    state.subTl = segs.length ? segs.map((g, i) => ({ i, start: g.start, dur: Math.max(0.4, g.end - g.start), end: g.end })) : null;
+    buildScenes(); renderScript(); renderTimeline(); ensurePreview(); updateSubTlUI(); goView('4'); drawPreview();
+    toast('4단계 자막 ' + lines.length + '줄' + (segs.length ? ' · 타임스탬프 반영' : ' · 음성 길이에 맞춰'), 'good');
+    logActivity('🅰️', 'STT → 4단계 자막 ' + lines.length + '줄' + (segs.length ? ' · 타임스탬프' : ''));
+  }
+
+  /* =========================================================
+     도구 · 떡상 순위 & 6종 벤치마킹
+     ========================================================= */
+  const TREND_PF_NAME = { youtube: '유튜브', tiktok: '틱톡', instagram: '인스타그램', other: '기타' };
+  const TREND_SAMPLE = [
+    ['순위', '채널', '영상 제목', '플랫폼', '구독자', '조회수', '좋아요', '업로드', '순위 변동'],
+    ['1', '살림천재TV', '3천원으로 주방 정리 끝내기', '유튜브', '18만', '412만', '8.9만', '2일 전', 'NEW'],
+    ['2', '먹방하는 수진', '편의점 신상 6종 한 번에', '틱톡', '4.2만', '186만', '6.1만', '4일 전', '▲7'],
+    ['3', '테크맛집', '이어폰 노캔 비교 30초컷', '유튜브', '31만', '95만', '2.4만', '55일 전', '▲2'],
+    ['4', '뷰티로그 민', '겨울 보습 크림 3일 사용기', '인스타그램', '9.8만', '78만', '3.3만', '1일 전', 'NEW'],
+    ['5', '주부살림왕', '세탁기 곰팡이 10분 정리', '유튜브', '46만', '52만', '1.1만', '400일 전', '▲3'],
+    ['6', '캠핑요리사', '캠핑에서 5분 카레', '틱톡', '2.1만', '41만', '1.9만', '1일 전', 'NEW'],
+    ['7', '다이어트하는 직장인', '도시락 3일 준비', '인스타그램', '6.5만', '12만', '4,200', '6일 전', '▼4'],
+    ['8', '살림하는 남자', '냉장고 정리 역주행', '유튜브', '12만', '390만', '5.2만', '900일 전', '▲1']
+  ];
+  const TREND_SAMPLE_TEXT = TREND_SAMPLE.map(r => r.join('\t')).join('\n');
+
+  const TREND_COLS = [
+    ['rank', /^(순위|랭킹|rank|no\.?|#)$/i],
+    ['move', /(변동|급등|순위\s*변|change)/i],
+    ['channel', /(채널|channel|크리에이터|계정|creator)/i],
+    ['title', /(영상|제목|콘텐츠|title|video)/i],
+    ['platform', /(플랫폼|platform|사이트)/i],
+    ['subs', /(구독|subscriber|subs)/i],
+    ['views', /(조회|views?|재생|play)/i],
+    ['likes', /(좋아요|likes?|하트)/i],
+    ['comments', /(댓글|comments?)/i],
+    ['uploaded', /(업로드|게시|날짜|date|등록)/i],
+    ['url', /(링크|url|주소)/i]
+  ];
+
+  function trendParseCount(v) {
+    if (v == null || v === '') return 0;
+    if (typeof v === 'number') return isFinite(v) ? Math.max(0, Math.round(v)) : 0;
+    const s = String(v).replace(/[,\s]/g, '').replace(/(명|회|개|views?|subs?)/gi, '');
+    const m = s.match(/^(-?\d+(?:\.\d+)?)(억|만|천|[KkMm])?$/);
+    if (!m) return 0;
+    let n = parseFloat(m[1]);
+    const u = m[2] || '';
+    if (u === '억') n *= 1e8;
+    else if (u === '만') n *= 1e4;
+    else if (u === '천') n *= 1e3;
+    else if (/k/i.test(u)) n *= 1e3;
+    else if (/m/i.test(u)) n *= 1e6;
+    return Math.max(0, Math.round(n));
+  }
+
+  function trendParseMove(v) {
+    const s = String(v == null ? '' : v).trim();
+    if (!s) return { type: 'none', delta: 0 };
+    if (/^new$/i.test(s) || /신규/.test(s)) return { type: 'new', delta: 0 };
+    const up = s.match(/[▲+↑]\s*(\d+)/); if (up) return { type: 'up', delta: +up[1] };
+    const dn = s.match(/[▼\-↓]\s*(\d+)/); if (dn) return { type: 'down', delta: +dn[1] };
+    if (/^[-–—]$/.test(s)) return { type: 'same', delta: 0 };
+    return { type: 'none', delta: 0 };
+  }
+
+  function trendParseDate(v) {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') return v > 1e11 ? v : Date.now() - Math.max(0, v) * 86400000;
+    const s = String(v).trim();
+    const ago = s.match(/(\d+)\s*(분|시간|일|주|개월|달|년)\s*전/);
+    if (ago) {
+      const n = +ago[1]; const u = ago[2];
+      const days = (u === '분' || u === '시간') ? n / 24 : u === '일' ? n : u === '주' ? n * 7 : (u === '개월' || u === '달') ? n * 30 : n * 365;
+      return Date.now() - days * 86400000;
+    }
+    const m = s.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+    const m2 = s.match(/^(\d{1,2})[.\-\/](\d{1,2})$/);
+    if (m2) { const now = new Date(); return new Date(now.getFullYear(), +m2[1] - 1, +m2[2]).getTime(); }
+    return null;
+  }
+  function trendDays(v) {
+    if (!v.uploaded) return null;
+    return Math.max(0, Math.floor((Date.now() - v.uploaded) / 86400000));
+  }
+  function trendPlatformKey(name) {
+    const s = String(name || '').toLowerCase();
+    if (/youtu|유튜브|yt/.test(s)) return 'youtube';
+    if (/tiktok|틱톡|douyin|더우인/.test(s)) return 'tiktok';
+    if (/insta|인스타|reels/.test(s)) return 'instagram';
+    return 'other';
+  }
+
+  function trendSplitDelim(line, delim) {
+    if (delim !== ',') return line.split(delim).map(s => s.trim());
+    const out = []; let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+      else if (c === ',' && !q) { out.push(cur); cur = ''; }
+      else cur += c;
+    }
+    out.push(cur);
+    return out.map(s => s.trim());
+  }
+
+  function trendGuessCols(width) {
+    if (width >= 7) return { rank: 0, channel: 1, title: 2, subs: 3, views: 4, likes: 5, uploaded: 6 };
+    if (width === 6) return { rank: 0, channel: 1, subs: 2, views: 3, likes: 4, uploaded: 5 };
+    if (width === 5) return { rank: 0, channel: 1, subs: 2, views: 3, uploaded: 4 };
+    if (width === 4) return { rank: 0, channel: 1, subs: 2, views: 3 };
+    if (width === 3) return { channel: 0, subs: 1, views: 2 };
+    if (width === 2) return { channel: 0, views: 1 };
+    return { channel: 0 };
+  }
+
+  function trendRowVideo(c, cols) {
+    const g = k => (cols[k] != null && c[cols[k]] != null) ? String(c[cols[k]]).trim() : '';
+    const channel = g('channel');
+    const title = g('title');
+    const views = trendParseCount(g('views'));
+    const subs = trendParseCount(g('subs'));
+    if (!views && !subs) return null;
+    return {
+      id: '',
+      rank: trendParseCount(g('rank')) || null,
+      move: trendParseMove(g('move') || (cols.move == null ? '' : '')),
+      channel, title,
+      platform: trendPlatformKey(g('platform') || channel + ' ' + title),
+      subs, views,
+      likes: trendParseCount(g('likes')),
+      comments: trendParseCount(g('comments')),
+      uploaded: trendParseDate(g('uploaded')),
+      url: g('url'), desc: '', captions: '', memo: ''
+    };
+  }
+
+  function trendParseText(text) {
+    const lines = String(text || '').replace(/\r/g, '').split('\n').map(l => l.replace(/\s+$/, '')).filter(l => l.trim());
+    if (!lines.length) return [];
+    const delim = lines.slice(0, 3).some(l => l.indexOf('\t') >= 0) ? '\t' : (lines[0].split(',').length >= 3 ? ',' : 'multi');
+    const split = l => delim === 'multi' ? l.split(/\s{2,}|\t/).map(s => s.trim()) : trendSplitDelim(l, delim);
+    let cells = lines.map(split).filter(r => r.length && r.some(c => c !== ''));
+    if (!cells.length) return [];
+    let cols = null;
+    const head = cells[0].join(' ');
+    if (/구독|조회|채널|channel|views|subs/i.test(head)) {
+      cols = {};
+      cells[0].forEach((h, i) => { TREND_COLS.forEach(([k, re]) => { if (cols[k] == null && re.test(h)) cols[k] = i; }); });
+      cells = cells.slice(1);
+    }
+    if (!cols) cols = trendGuessCols(cells[0].length);
+    return cells.map(c => trendRowVideo(c, cols)).filter(Boolean);
+  }
+
+  function trendFromObject(o) {
+    if (!o || typeof o !== 'object') return null;
+    const pick = (...keys) => { for (const k of keys) { if (o[k] != null && o[k] !== '') return o[k]; } return ''; };
+    const views = trendParseCount(pick('views', 'viewCount', 'view_count', '조회수', 'playCount'));
+    const subs = trendParseCount(pick('subs', 'subscribers', 'subscriberCount', 'subscriber_count', '구독자'));
+    if (!views && !subs) return null;
+    const channel = String(pick('channel', 'channelName', 'creator', '채널', 'author') || '');
+    const title = String(pick('title', 'videoTitle', 'name', '영상 제목', '제목') || '');
+    return {
+      id: '', rank: trendParseCount(pick('rank', '순위')) || null,
+      move: trendParseMove(pick('move', 'rankChange', '변동', '순위 변동')),
+      channel, title,
+      platform: trendPlatformKey(pick('platform', '플랫폼', 'site') || channel + ' ' + title),
+      subs, views,
+      likes: trendParseCount(pick('likes', 'likeCount', '좋아요')),
+      comments: trendParseCount(pick('comments', 'commentCount', '댓글')),
+      uploaded: trendParseDate(pick('uploaded', 'uploadDate', 'publishedAt', 'date', '업로드')),
+      url: String(pick('url', 'link', '링크') || ''),
+      desc: String(pick('desc', 'description', '설명') || ''),
+      captions: String(pick('captions', 'subtitle', '자막') || ''),
+      memo: String(pick('memo', 'note', '메모') || '')
+    };
+  }
+
+  function trendFromJSON(text) {
+    let data;
+    try { data = JSON.parse(text); } catch (e) { throw new Error('JSON 해석 실패: ' + String(e.message || '').slice(0, 70)); }
+    const arr = Array.isArray(data) ? data : (data.videos || data.items || data.rows || data.data || []);
+    if (!Array.isArray(arr)) throw new Error('JSON에서 영상 목록을 찾지 못했습니다 (배열 또는 videos)');
+    return arr.map(trendFromObject).filter(Boolean);
+  }
+
+  function trendKey(v) {
+    return [v.platform || '', v.channel || '', v.title || '', v.views || 0].join('|');
+  }
+  function trendAddVideos(list, replace) {
+    if (replace) state.trend.videos = [];
+    const seen = new Set(state.trend.videos.map(trendKey));
+    let added = 0;
+    (list || []).forEach(v => {
+      const k = trendKey(v);
+      if (seen.has(k)) return;
+      seen.add(k);
+      v.id = uid('t');
+      state.trend.videos.push(v);
+      added++;
+    });
+    saveTrend();
+    renderTrend();
+    return added;
+  }
+
+  function trendScore(v) {
+    const ratio = v.subs > 0 ? v.views / v.subs : 0;
+    const ratioPts = clamp(Math.log10(Math.max(ratio, 0.01)) / Math.log10(100) * 40, 0, 40);
+    const mv = v.move || { type: 'none', delta: 0 };
+    const movePts = mv.type === 'new' ? 25 : mv.type === 'up' ? Math.min(25, 8 + mv.delta * 2) : mv.type === 'down' ? 0 : 8;
+    const d = trendDays(v);
+    let freshPts = d == null ? 6 : d <= 3 ? 15 : d <= 7 ? 12 : d <= 14 ? 8 : d <= 30 ? 4 : 0;
+    const reverse = d != null && d > 30 && ratio >= 5;
+    if (reverse) freshPts = 15;
+    const eng = v.views > 0 ? ((v.likes || 0) + (v.comments || 0)) / v.views : 0;
+    const engPts = clamp(eng / 0.12 * 20, 0, 20);
+    const total = Math.round(clamp(ratioPts + movePts + freshPts + engPts, 0, 100));
+    const tag = mv.type === 'new' ? 'NEW' : reverse ? '역주행' : (d != null && d <= 7 && ratio >= 2) ? '신작 급등' : mv.type === 'up' ? '▲' + mv.delta : '';
+    const tagKind = mv.type === 'new' ? 'new' : reverse ? 'reverse' : (d != null && d <= 7 && ratio >= 2) ? 'fresh' : mv.type === 'up' ? 'up' : 'none';
+    return { ratio, ratioPts, movePts, freshPts, engPts, total, reverse, tag, tagKind, days: d, label: total >= 80 ? '폭발' : total >= 60 ? '떡상' : total >= 40 ? '상승' : '관찰' };
+  }
+
+  function trendList() {
+    const t = state.trend;
+    let list = t.videos.map(v => ({ v, s: trendScore(v) }));
+    if (t.platform && t.platform !== 'all') list = list.filter(x => x.v.platform === t.platform);
+    if (t.filter === 'new') list = list.filter(x => x.v.move && x.v.move.type === 'new');
+    if (t.filter === 'rise') list = list.filter(x => x.v.move && x.v.move.type === 'up');
+    if (t.filter === 'reverse') list = list.filter(x => x.s.reverse);
+    if (t.filter === 'fresh') list = list.filter(x => x.s.days != null && x.s.days <= 7);
+    const key = t.sort;
+    const cmp = key === 'views' ? (a, b) => b.v.views - a.v.views
+      : key === 'ratio' ? (a, b) => b.s.ratio - a.s.ratio
+      : key === 'move' ? (a, b) => ((b.v.move.type === 'new' ? 99 : 0) + (b.v.move.delta || 0)) - ((a.v.move.type === 'new' ? 99 : 0) + (a.v.move.delta || 0))
+      : key === 'date' ? (a, b) => (b.v.uploaded || 0) - (a.v.uploaded || 0)
+      : (a, b) => b.s.total - a.s.total;
+    list.sort((a, b) => cmp(a, b) || ((a.v.rank || 999) - (b.v.rank || 999)));
+    return list;
+  }
+
+  function trendPicked() { return state.trend.videos.find(v => v.id === state.trend.pickId) || null; }
+  function trendPick(id) {
+    state.trend.pickId = id;
+    saveTrend();
+    renderTrend();
+  }
+
+  function renderTrend() {
+    const t = state.trend;
+    const list = trendList();
+    if ($('#trendCount')) $('#trendCount').textContent = t.videos.length + '개';
+    if ($('#trendEmpty')) $('#trendEmpty').classList.toggle('hidden', list.length > 0);
+    const body = $('#trendTableBody');
+    if (body) {
+      body.innerHTML = list.slice(0, 80).map((x, idx) => {
+        const v = x.v, s = x.s, mv = v.move || { type: 'none', delta: 0 };
+        const mvHtml = mv.type === 'new' ? '<span class="sig new">NEW</span>'
+          : mv.type === 'up' ? '<span class="sig up">▲' + mv.delta + '</span>'
+          : mv.type === 'down' ? '<span class="sig none">▼' + mv.delta + '</span>'
+          : '<span class="sig none">—</span>';
+        const sigHtml = s.tag ? '<span class="sig ' + s.tagKind + '">' + esc(s.tag) + '</span>' : '<span class="sig none">—</span>';
+        const dateTxt = s.days == null ? '' : (s.days === 0 ? '오늘' : s.days + '일 전');
+        return '<tr data-trend="' + v.id + '" class="' + (v.id === t.pickId ? 'on' : '') + '">' +
+          '<td class="num">' + (v.rank != null ? v.rank : idx + 1) + '</td>' +
+          '<td><span class="t-title">' + esc(v.title || v.channel || '(제목 없음)') + '</span>' +
+          '<span class="t-sub">' + esc([v.channel, TREND_PF_NAME[v.platform], dateTxt].filter(Boolean).join(' · ')) + '</span></td>' +
+          '<td class="num">' + fmtNum(v.subs) + '</td>' +
+          '<td class="num">' + fmtNum(v.views) + '</td>' +
+          '<td class="num">' + (s.ratio ? s.ratio.toFixed(1) + 'x' : '—') + '</td>' +
+          '<td>' + mvHtml + '</td><td>' + sigHtml + '</td>' +
+          '<td><div class="score-cell"><span class="sb"><i style="width:' + s.total + '%"></i></span><b>' + s.total + '</b></div></td></tr>';
+      }).join('');
+    }
+    const st = $('#trendStatus');
+    if (st) st.textContent = t.videos.length ? '전체 ' + t.videos.length + '개 · 지금 보기 ' + list.length + '개' : '표를 붙여넣고 「표 정리하기」를 누르면 순위가 계산됩니다.';
+    const sortEl = $('#trendSort'); if (sortEl && sortEl.value !== t.sort) sortEl.value = t.sort;
+    $$('#segTrendFilter [data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === t.filter));
+    $$('#trendPlatform [data-pf]').forEach(b => b.classList.toggle('on', b.dataset.pf === t.platform));
+    renderTrendPick();
+  }
+
+  function renderTrendPick() {
+    const v = trendPicked();
+    const card = $('#trendPickBody'), empty = $('#trendPickEmpty'), badge = $('#trendPickBadge'), score = $('#tpScore');
+    if (badge) badge.textContent = v ? (v.title || v.channel || '선택') : '없음';
+    if (empty) empty.classList.toggle('hidden', !!v);
+    if (card) card.classList.toggle('hidden', !v);
+    if (!v) { if (score) score.innerHTML = ''; return; }
+    const s = trendScore(v);
+    const setVal = (sel, val) => { const el = $(sel); if (el && document.activeElement !== el) el.value = val || ''; };
+    setVal('#tpTitle', v.title);
+    setVal('#tpDesc', v.desc);
+    setVal('#tpCaptions', v.captions);
+    setVal('#tpMemo', v.memo);
+    if (score) {
+      score.innerHTML =
+        '<div class="sb-item"><span>배율</span><b>' + (s.ratio ? s.ratio.toFixed(1) + 'x' : '—') + '</b></div>' +
+        '<div class="sb-item"><span>배율 점수</span><b>' + s.ratioPts.toFixed(0) + '</b></div>' +
+        '<div class="sb-item"><span>순위 점수</span><b>' + s.movePts.toFixed(0) + '</b></div>' +
+        '<div class="sb-item"><span>업로드 점수</span><b>' + s.freshPts.toFixed(0) + '</b></div>' +
+        '<div class="sb-item total"><span>떡상 점수 · ' + esc(s.label) + '</span><b>' + s.total + '</b></div>';
+    }
+  }
+
+  function trendPickField(key, val) {
+    const v = trendPicked();
+    if (!v) return;
+    v[key] = val;
+    saveTrend();
+    if (key === 'title') renderTrend();
+  }
+
+  function trendAddManual() {
+    const v = trendFromObject({
+      title: $('#tNewTitle').value, channel: $('#tNewChannel').value, platform: $('#tNewPlatform').value,
+      subs: $('#tNewSubs').value, views: $('#tNewViews').value, likes: $('#tNewLikes').value,
+      uploaded: $('#tNewDate').value, move: $('#tNewMove').value
+    });
+    if (!v) { toast('조회수나 구독자를 숫자로 넣어 주세요', 'bad'); return; }
+    v.platform = $('#tNewPlatform').value;
+    const added = trendAddVideos([v], false);
+    if (added) {
+      state.trend.pickId = state.trend.videos[state.trend.videos.length - 1].id;
+      saveTrend(); renderTrend();
+      ['#tNewTitle', '#tNewChannel', '#tNewSubs', '#tNewViews', '#tNewLikes', '#tNewDate', '#tNewMove'].forEach(sel => { const el = $(sel); if (el) el.value = ''; });
+      toast('영상을 추가했습니다', 'good');
+    } else toast('이미 목록에 있는 영상입니다', 'bad');
+  }
+
+  function trendParseFromInput() {
+    const text = ($('#trendInput').value || '').trim();
+    if (!text) { toast('표를 붙여넣거나 샘플 차트를 눌러 주세요', 'bad'); return; }
+    let list = [];
+    try {
+      if (/^[\[{]/.test(text)) list = trendFromJSON(text);
+      else list = trendParseText(text);
+    } catch (e) { toast(String(e.message || e), 'bad'); return; }
+    if (!list.length) { toast('표에서 영상 줄을 찾지 못했습니다 · 열 이름(구독자·조회수)을 확인하세요', 'bad'); return; }
+    const prev = trendPicked();
+    const added = trendAddVideos(list, false);
+    if (!prev && state.trend.videos.length) state.trend.pickId = state.trend.videos[0].id;
+    saveTrend(); renderTrend();
+    toast(added + '개 영상을 정리했습니다' + (list.length - added ? ' (중복 ' + (list.length - added) + '개 제외)' : ''), 'good');
+    logActivity('📊', '떡상 순위 ' + added + '개 정리');
+  }
+
+  function trendLoadSample() {
+    const prev = trendPicked();
+    trendAddVideos(trendParseText(TREND_SAMPLE_TEXT), false);
+    if (!prev && state.trend.videos.length) state.trend.pickId = state.trend.videos[0].id;
+    saveTrend(); renderTrend();
+    toast('샘플 차트 8개를 넣었습니다 — 확인용 예시 데이터입니다');
+  }
+
+  /* ---------- 6종 벤치마킹 ---------- */
+  function benchNormalize(raw) {
+    const r = raw || {};
+    const arr = v => Array.isArray(v) ? v : (v ? [v] : []);
+    const str = v => String(v == null ? '' : v);
+    const obj = v => (v && typeof v === 'object') ? v : {};
+    const an = obj(r.analysis), pl = obj(r.plan), cta = obj(r.cta);
+    return {
+      analysis: {
+        summary: str(an.summary), whyHot: str(an.whyHot || an.why || ''), target: str(an.target),
+        strengths: arr(an.strengths).map(str).slice(0, 6),
+        weaknesses: arr(an.weaknesses).map(str).slice(0, 6),
+        keywords: arr(an.keywords).map(str).slice(0, 10)
+      },
+      plan: {
+        concept: str(pl.concept), angle: str(pl.angle), format: str(pl.format), length: str(pl.length),
+        points: arr(pl.points).map(str).slice(0, 8)
+      },
+      hooks: arr(r.hooks).map(str).filter(Boolean).slice(0, 6),
+      script: arr(r.script).map(str).filter(Boolean).slice(0, 12),
+      scenes: arr(r.scenes).map(x => ({ time: str((x || {}).time), scene: str((x || {}).scene), visual: str((x || {}).visual), caption: str((x || {}).caption), direction: str((x || {}).direction) })).slice(0, 12),
+      captions: arr(r.captions).map(str).filter(Boolean).slice(0, 20),
+      cta: { text: str(cta.text), comment: str(cta.comment), hashtags: arr(cta.hashtags).map(str).slice(0, 10) }
+    };
+  }
+
+  async function geminiBench(v) {
+    const s = trendScore(v);
+    const mv = v.move || { type: 'none', delta: 0 };
+    const mvTxt = mv.type === 'new' ? 'NEW' : mv.type === 'up' ? '▲' + mv.delta : mv.type === 'down' ? '▼' + mv.delta : '변동 없음';
+    const prompt = [
+      '너는 한국 쇼츠·릴스 콘텐츠 전략가다. 아래 경쟁 영상을 분석해 6종 벤치마킹을 JSON 하나로 써라.',
+      '영상 제목: ' + (v.title || '(없음)'),
+      '채널: ' + (v.channel || '(없음)') + ' / 플랫폼: ' + (TREND_PF_NAME[v.platform] || '기타'),
+      '구독자: ' + v.subs + ' / 조회수: ' + v.views + ' / 구독자 대비 배율: ' + s.ratio.toFixed(1) + 'x',
+      '업로드: ' + (s.days != null ? s.days + '일 전' : '미상') + ' / 순위 변동: ' + mvTxt + ' / 떡상 점수: ' + s.total + '/100',
+      '설명: ' + (v.desc || '(없음)'),
+      '공개 자막·대사: ' + (v.captions || '(없음)'),
+      '내 메모: ' + (v.memo || '(없음)'),
+      '규칙: 주어진 정보와 자막에서 확인되는 것만 근거로 쓴다. 없는 조회수·시청자 반응을 지어내지 마라. 한국어로, 바로 따라 만들 수 있게 구체적으로.',
+      'hooks는 6개(각 1초 안에 말할 수 있는 짧은 문장), script는 5~7문장, scenes는 4~6개(초 구간 포함), captions는 5~10줄.',
+      'JSON: {"analysis":{"summary":"","whyHot":"","target":"","strengths":[""],"weaknesses":[""],"keywords":[""]},' +
+      '"plan":{"concept":"","angle":"","format":"","length":"","points":[""]},' +
+      '"hooks":[""],"script":[""],"scenes":[{"time":"0-3초","scene":"","visual":"","caption":"","direction":""}],' +
+      '"captions":[""],"cta":{"text":"","comment":"","hashtags":["#쇼츠"]}}'
+    ].join('\n');
+    const raw = await geminiJSON(prompt, { temp: 0.8, maxTokens: 3000 });
+    const out = benchNormalize(raw);
+    if (!out.hooks.length && !out.script.length && !out.analysis.summary) throw new Error('벤치마킹 응답이 비어 있습니다');
+    out.demo = false;
+    return out;
+  }
+
+  function demoBench(v) {
+    const name = v.title || v.channel || '이 영상';
+    const ch = v.channel || '경쟁 채널';
+    const s = trendScore(v);
+    return {
+      demo: true,
+      analysis: {
+        summary: name + '은(는) ' + ch + '의 ' + (s.days != null ? s.days + '일 전 ' : '') + '영상으로, 구독자 대비 조회수 ' + s.ratio.toFixed(1) + '배 · 떡상 점수 ' + s.total + '점을 기록했습니다.',
+        whyHot: '첫 1~2초에 결과 장면을 먼저 보여 주고 설명은 뒤로 미룹니다. 화면 자막이 짧아 소리 없이 봐도 내용이 남습니다.',
+        target: '정보를 빠르게 얻고 싶은 20~40대 시청자',
+        strengths: ['첫 장면에 결과를 먼저 보여 줌', '자막 한 줄이 15자 안팎으로 짧음', '마지막에 저장·공유를 자연스럽게 유도'],
+        weaknesses: ['중반 설명이 길어 이탈 지점이 생김', '제품 실제 사용 장면이 짧음'],
+        keywords: [ch, v.title || '쇼츠', '떡상 구조']
+      },
+      plan: {
+        concept: name + ' 구조를 내 제품에 맞게 바꾸기',
+        angle: '결과 선공개 → 이유 3가지 → 마무리 CTA',
+        format: '9:16 세로 · 자막 중심 · 컷 2초 내외',
+        length: '20~25초 (문장 5~6개)',
+        points: ['도입 2초 안에 결과 컷', '이유는 숫자·비교로 3개만', '자막은 한 줄 15자 이내', '마지막 3초에 댓글 유도']
+      },
+      hooks: [
+        '이거 진짜 ' + (v.title || '이거') + ' 맞아요?',
+        '3천원으로 이게 된다고?',
+        '저만 몰랐던 방법이에요',
+        '이거 보기 전엔 사지 마세요',
+        '1분만 보면 바로 따라 합니다',
+        '결과부터 보여 드릴게요'
+      ],
+      script: [
+        '결과부터 보여 드릴게요. 이렇게 됩니다.',
+        '방법은 세 가지인데, 첫 번째가 제일 중요해요.',
+        '준비물은 집에 있는 것만 쓰면 됩니다.',
+        '저는 이걸 모르고 3년을 그냥 지나쳤어요.',
+        '순서만 바꿔도 결과가 달라집니다.',
+        '자세한 준비물은 고정댓글에 정리해 뒀어요.'
+      ],
+      scenes: [
+        { time: '0-3초', scene: '결과 먼저', visual: '완성된 결과 클로즈업', caption: '이거 3천원이면 됩니다', direction: '결과 화면을 1.2배 확대' },
+        { time: '3-9초', scene: '이유 1', visual: '준비물 나열 컷', caption: '준비물은 이 3개뿐', direction: '손으로 하나씩 집어 보여 주기' },
+        { time: '9-16초', scene: '이유 2·3', visual: '전후 비교 분할 화면', caption: '순서만 바꿔도 이 차이', direction: '전후 화면을 번갈아 0.5초씩' },
+        { time: '16-22초', scene: '마무리 CTA', visual: '완성 화면 + 댓글 안내', caption: '준비물은 고정댓글에', direction: '마지막 2초는 정지 화면' }
+      ],
+      captions: ['결과부터 보여 드릴게요', '이렇게 됩니다', '방법은 세 가지', '첫 번째가 제일 중요해요', '준비물은 집에 있는 것만', '순서만 바꿔도 결과가 달라져요', '준비물은 고정댓글에 있어요'],
+      cta: { text: '준비물 목록은 고정댓글에서 확인하세요. 저장해 두면 주말에 바로 따라 할 수 있어요.', comment: '궁금한 점 댓글로 남겨 주세요. 다음 영상에서 다뤄 드립니다.', hashtags: ['#쇼츠', '#살림템', '#꿀팁'] }
+    };
+  }
+
+  async function runBenchmark() {
+    const v = trendPicked();
+    if (!v) { toast('순위표에서 영상을 먼저 고르세요', 'bad'); return; }
+    const btn = $('#btnBenchRun'), status = $('#benchStatus');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 만드는 중'; }
+    if (status) status.textContent = '6종 벤치마킹을 만드는 중…';
+    try {
+      let out;
+      if (!state.demo && realKeys().length > 0) {
+        out = await geminiBench(v);
+      } else {
+        await new Promise(r => setTimeout(r, 220));
+        out = demoBench(v);
+      }
+      state.trend.bench = out;
+      state.trend.benchDemo = !!out.demo;
+      state.trend.benchAt = Date.now();
+      saveTrend(); renderBench();
+      if (status) status.textContent = (out.demo ? '데모' : 'Gemini') + ' 6종 벤치마킹 완료 · ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+      toast(out.demo ? '데모 6종 벤치마킹을 만들었습니다' : '6종 벤치마킹 완성', 'good');
+      logActivity('🪄', '6종 벤치마킹 · ' + (v.title || v.channel || '영상') + (out.demo ? ' (데모)' : ' (AI)'));
+    } catch (e) {
+      if (status) status.textContent = '생성 실패: ' + errMsg(e);
+      toast('벤치마킹 실패: ' + errMsg(e), 'bad');
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '🪄 6종 벤치마킹 생성'; }
+    }
+  }
+
+  function benchLines(arr) {
+    return '<ol class="lines">' + (arr || []).map((x, i) => '<li><i>' + (i + 1) + '</i><span>' + esc(x) + '</span></li>').join('') + '</ol>';
+  }
+  function benchPara(label, val) {
+    return val ? '<div class="line"><strong>' + esc(label) + '</strong> · ' + esc(val) + '</div>' : '';
+  }
+
+  function renderBench() {
+    const b = state.trend.bench, grid = $('#benchGrid'), empty = $('#benchEmpty'), badge = $('#benchBadge');
+    if (!grid) return;
+    if (empty) empty.classList.toggle('hidden', !!b);
+    if (badge) {
+      badge.textContent = b ? (state.trend.benchDemo ? '데모' : 'Gemini') : '없음';
+      badge.className = 'badge ' + (b ? (state.trend.benchDemo ? 'demo' : 'live') : '');
+    }
+    const copyBtn = k => '<button class="btn xs ghost" type="button" data-bench-copy="' + k + '">📋 복사</button>';
+    if (!b) { grid.innerHTML = ''; return; }
+    const item = (no, title, body, acts, wide) =>
+      '<div class="bench-item' + (wide ? ' wide' : '') + '"><div class="bh"><b>' + no + ' ' + esc(title) + '</b><div class="row">' + (acts || '') + '</div></div><div class="bb">' + body + '</div></div>';
+    const an = b.analysis || {}, pl = b.plan || {}, cta = b.cta || {};
+    const anBody = benchPara('요약', an.summary) + benchPara('왜 떴나', an.whyHot) + benchPara('타깃', an.target) +
+      (an.strengths && an.strengths.length ? '<div class="line"><strong>강점</strong></div>' + benchLines(an.strengths) : '') +
+      (an.weaknesses && an.weaknesses.length ? '<div class="line"><strong>약점</strong></div>' + benchLines(an.weaknesses) : '') +
+      (an.keywords && an.keywords.length ? '<div class="line"><strong>키워드</strong> · ' + esc(an.keywords.join(', ')) + '</div>' : '');
+    const plBody = benchPara('콘셉트', pl.concept) + benchPara('앵글', pl.angle) + benchPara('형식', pl.format) + benchPara('길이', pl.length) +
+      (pl.points && pl.points.length ? benchLines(pl.points) : '');
+    const scBody = (b.scenes || []).map(x => '<div class="line"><strong>' + esc(x.time || '') + '</strong> · ' + esc(x.scene || '') +
+      (x.visual ? ' · 화면: ' + esc(x.visual) : '') + (x.caption ? ' · 자막: ' + esc(x.caption) : '') + (x.direction ? ' · 연출: ' + esc(x.direction) : '') + '</div>').join('');
+    const ctBody = (b.captions && b.captions.length ? benchLines(b.captions) : '') +
+      benchPara('CTA', cta.text) + benchPara('댓글 유도', cta.comment) +
+      (cta.hashtags && cta.hashtags.length ? '<div class="line"><strong>해시태그</strong> · ' + esc(cta.hashtags.join(' ')) + '</div>' : '');
+    grid.innerHTML =
+      item('①', '레퍼런스 분석', anBody || '<span class="hint">내용 없음</span>', copyBtn('analysis'), true) +
+      item('②', '콘텐츠 기획', plBody || '<span class="hint">내용 없음</span>', copyBtn('plan'), false) +
+      item('③', '후킹 문구', b.hooks.length ? benchLines(b.hooks) : '<span class="hint">내용 없음</span>', copyBtn('hooks') + '<button class="btn xs soft" type="button" data-bench-send="hooks">🎣 3단계 후킹으로</button>', false) +
+      item('④', '대본', b.script.length ? benchLines(b.script) : '<span class="hint">내용 없음</span>', copyBtn('script') + '<button class="btn xs soft" type="button" data-bench-send="script">📝 3단계 대본으로</button>', false) +
+      item('⑤', '장면별 구성', scBody || '<span class="hint">내용 없음</span>', copyBtn('scenes') + '<button class="btn xs ghost" type="button" data-bench-send="scenes">🎬 4단계 장면 이름으로</button>', true) +
+      item('⑥', '자막 및 CTA', ctBody || '<span class="hint">내용 없음</span>', copyBtn('cta') + '<button class="btn xs mint" type="button" data-bench-send="captions">🅰️ 4단계 자막으로</button>', true);
+  }
+
+  function benchTextOf(kind) {
+    const b = state.trend.bench;
+    if (!b) return '';
+    if (kind === 'analysis') {
+      const an = b.analysis || {};
+      return ['① 레퍼런스 분석', '요약: ' + an.summary, '왜 떴나: ' + an.whyHot, '타깃: ' + an.target,
+        '강점: ' + (an.strengths || []).join(' / '), '약점: ' + (an.weaknesses || []).join(' / '), '키워드: ' + (an.keywords || []).join(', ')].join('\n');
+    }
+    if (kind === 'plan') {
+      const pl = b.plan || {};
+      return ['② 콘텐츠 기획', '콘셉트: ' + pl.concept, '앵글: ' + pl.angle, '형식: ' + pl.format, '길이: ' + pl.length,
+        ...(pl.points || []).map((p, i) => (i + 1) + '. ' + p)].join('\n');
+    }
+    if (kind === 'hooks') return (b.hooks || []).map((h, i) => (i + 1) + '. ' + h).join('\n');
+    if (kind === 'script') return (b.script || []).map((s, i) => (i + 1) + '. ' + s).join('\n');
+    if (kind === 'scenes') return (b.scenes || []).map((s, i) => (i + 1) + '. ' + [s.time, s.scene, s.visual && ('화면: ' + s.visual), s.caption && ('자막: ' + s.caption), s.direction && ('연출: ' + s.direction)].filter(Boolean).join(' · ')).join('\n');
+    if (kind === 'cta') {
+      const c = b.cta || {};
+      return ['⑥ 자막 및 CTA', ...(b.captions || []).map((x, i) => (i + 1) + '. ' + x), 'CTA: ' + c.text, '댓글: ' + c.comment, '해시태그: ' + (c.hashtags || []).join(' ')].join('\n');
+    }
+    return '';
+  }
+  function benchAllText() {
+    return ['①', '②', '③', '④', '⑤', '⑥'].map((n, i) => benchTextOf(['analysis', 'plan', 'hooks', 'script', 'scenes', 'cta'][i])).filter(Boolean).join('\n\n');
+  }
+  function benchMarkdown() {
+    const b = state.trend.bench;
+    if (!b) return '';
+    const v = trendPicked();
+    const s = v ? trendScore(v) : null;
+    const head = ['# 6종 벤치마킹 — ' + ((v && (v.title || v.channel)) || '선택 영상'), ''];
+    if (v) head.push('- 채널: ' + (v.channel || '—') + ' / 플랫폼: ' + (TREND_PF_NAME[v.platform] || '기타'),
+      '- 구독자: ' + v.subs + ' / 조회수: ' + v.views + ' / 배율: ' + (s.ratio ? s.ratio.toFixed(1) + 'x' : '—'),
+      '- 떡상 점수: ' + s.total + '점 (' + s.label + ')', '');
+    const an = b.analysis || {}, pl = b.plan || {}, c = b.cta || {};
+    const md = [
+      '## ① 레퍼런스 분석', '', '**요약** ' + (an.summary || ''), '', '**왜 떴나** ' + (an.whyHot || ''), '', '**타깃** ' + (an.target || ''), '',
+      '**강점**', ...(an.strengths || []).map(x => '- ' + x), '', '**약점**', ...(an.weaknesses || []).map(x => '- ' + x), '',
+      '**키워드** ' + (an.keywords || []).join(', '), '',
+      '## ② 콘텐츠 기획', '', '- 콘셉트: ' + (pl.concept || ''), '- 앵글: ' + (pl.angle || ''), '- 형식: ' + (pl.format || ''), '- 길이: ' + (pl.length || ''), '',
+      ...(pl.points || []).map((p, i) => (i + 1) + '. ' + p), '',
+      '## ③ 후킹 문구', '', ...(b.hooks || []).map((h, i) => (i + 1) + '. ' + h), '',
+      '## ④ 대본', '', ...(b.script || []).map((t, i) => (i + 1) + '. ' + t), '',
+      '## ⑤ 장면별 구성', '', '| 초 | 장면 | 화면 | 자막 | 연출 |', '|---|---|---|---|---|',
+      ...(b.scenes || []).map(x => '| ' + [x.time, x.scene, x.visual, x.caption, x.direction].map(y => String(y || '').replace(/\|/g, '/')).join(' | ') + ' |'), '',
+      '## ⑥ 자막 및 CTA', '', ...(b.captions || []).map((t, i) => (i + 1) + '. ' + t), '',
+      '**CTA** ' + (c.text || ''), '', '**댓글 유도** ' + (c.comment || ''), '', '**해시태그** ' + (c.hashtags || []).join(' ')
+    ];
+    return head.concat(md).join('\n');
+  }
+
+  function benchSend(kind) {
+    const b = state.trend.bench;
+    if (!b) { toast('먼저 6종 벤치마킹을 만들어 주세요', 'bad'); return; }
+    const s = ensureScriptShell();
+    if (kind === 'hooks') {
+      if (!(b.hooks || []).length) { toast('후킹 문구가 없습니다', 'bad'); return; }
+      s.hooks = b.hooks.slice(0, 6);
+      if (!s.sentences.length) s.sentences = [{ text: s.hooks[0] }];
+      renderScript(); goView('3');
+      toast('3단계 후킹 후보 ' + s.hooks.length + '개로 보냈습니다', 'good');
+      logActivity('🎣', '벤치마킹 → 3단계 후킹 ' + s.hooks.length + '개');
+      return;
+    }
+    if (kind === 'script') {
+      if (!(b.script || []).length) { toast('대본이 없습니다', 'bad'); return; }
+      s.sentences = b.script.map(text => ({ text }));
+      const t1 = ((b.plan || {}).concept || (b.analysis || {}).summary || '').slice(0, 22);
+      s.titles = [t1, s.titles[1] || ''];
+      state.voice = null; state.subTl = null;
+      renderScript(); renderTimeline(); buildScenes(); ensurePreview(); updateSubTlUI(); goView('3');
+      toast('3단계 대본을 벤치마킹 ' + s.sentences.length + '문장으로 바꿨습니다', 'good');
+      logActivity('📝', '벤치마킹 → 3단계 대본 ' + s.sentences.length + '문장');
+      return;
+    }
+    if (kind === 'captions') {
+      if (!(b.captions || []).length) { toast('자막이 없습니다', 'bad'); return; }
+      s.sentences = b.captions.map(text => ({ text }));
+      state.subTl = null; state.voice = null;
+      buildScenes(); renderScript(); renderTimeline(); ensurePreview(); updateSubTlUI(); goView('4'); drawPreview();
+      toast('4단계 자막 ' + s.sentences.length + '줄로 보냈습니다', 'good');
+      logActivity('🅰️', '벤치마킹 → 4단계 자막 ' + s.sentences.length + '줄');
+      return;
+    }
+    if (kind === 'scenes') {
+      if (!(b.scenes || []).length) { toast('장면 구성이 없습니다', 'bad'); return; }
+      if (!s.sentences.length) s.sentences = b.script.length ? b.script.map(text => ({ text })) : b.captions.map(text => ({ text }));
+      if (!s.sentences.length) { toast('장면을 붙일 대본이 없습니다 · ④ 대본을 먼저 보내세요', 'bad'); return; }
+      buildScenes();
+      state.scenes.forEach((sc, i) => {
+        const plan = b.scenes[i];
+        if (plan) sc.label = [plan.scene, plan.visual].filter(Boolean).join(' · ').slice(0, 40) || sc.label;
+      });
+      renderScenes(); goView('4'); drawPreview();
+      toast('4단계 장면 이름에 벤치마킹 구성을 넣었습니다', 'good');
+      logActivity('🎬', '벤치마킹 → 4단계 장면 이름');
+    }
+  }
+
+  function loadTrend() {
+    const saved = lsGet(LS.trend, null);
+    if (!saved || typeof saved !== 'object') return;
+    if (Array.isArray(saved.videos)) state.trend.videos = saved.videos.filter(v => v && v.id).slice(0, 300);
+    ['sort', 'filter', 'platform'].forEach(k => { if (typeof saved[k] === 'string') state.trend[k] = saved[k]; });
+    if (typeof saved.pickId === 'string') state.trend.pickId = saved.pickId;
+    if (saved.bench && typeof saved.bench === 'object') state.trend.bench = saved.bench;
+    state.trend.benchDemo = !!saved.benchDemo;
+    state.trend.benchAt = saved.benchAt || 0;
+  }
+  function saveTrend() {
+    const t = state.trend;
+    lsSet(LS.trend, { videos: t.videos, sort: t.sort, filter: t.filter, platform: t.platform, pickId: t.pickId, bench: t.bench, benchDemo: t.benchDemo, benchAt: t.benchAt });
+  }
 
   function stepDone(n) {
     switch (n) {
@@ -3032,7 +4047,7 @@
     });
     refreshRail();
     if (id === '3') renderHooks();
-    if (id === '4') { if (!state.scenes.length) buildScenes(); ensurePreview(); updatePreviewMeta(); }
+    if (id === '4') { if (!state.scenes.length) buildScenes(); ensurePreview(); updatePreviewMeta(); updateSubTlUI(); }
     if (id === '5') { renderTitles(); renderThumb(); }
     if (id === '6') { buildHubTexts(); renderHub(); }
     if (id === 'coupang') { renderHistory(); renderCpBadge(); }
@@ -3040,6 +4055,8 @@
     if (id === 'famous') renderFamous();
     if (id === 'multi') renderMulti();
     if (id === 'eraser') { renderEraserOptions(); syncEraserInputs(); drawEraserPreview(); }
+    if (id === 'stt') renderStt();
+    if (id === 'trend') { renderTrend(); renderBench(); }
     if (id === 'settings') { renderKeys(); renderAccounts(); }
     if (!opts.keepScroll) {
       try { window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' }); } catch (e) { window.scrollTo(0, 0); }
@@ -3091,6 +4108,118 @@
     });
     $('#btnHeroStart').addEventListener('click', () => goStep(1));
     $('#btnHeroDemo').addEventListener('click', async () => { fillSampleLinks(); await runAnalysis(); });
+    // ===== 도구 · 음성→텍스트 (STT) =====
+    const sdz = $('#sttDrop'), sfi = $('#sttFileInput');
+    if (sdz && sfi) {
+      sdz.addEventListener('click', () => sfi.click());
+      sdz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sfi.click(); } });
+      ['dragenter', 'dragover'].forEach(ev => sdz.addEventListener(ev, e => { e.preventDefault(); sdz.classList.add('over'); }));
+      ['dragleave', 'drop'].forEach(ev => sdz.addEventListener(ev, e => { e.preventDefault(); sdz.classList.remove('over'); }));
+      sdz.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) sttSetFile(e.dataTransfer.files[0]); });
+      sfi.addEventListener('change', () => { if (sfi.files && sfi.files[0]) sttSetFile(sfi.files[0]); sfi.value = ''; });
+    }
+    $('#sttFileInfo').addEventListener('click', e => { if (e.target.closest('[data-stt-remove]')) sttRemoveFile(); });
+    $('#sttLang').addEventListener('change', () => { state.stt.lang = $('#sttLang').value; renderStt(); });
+    $('#segSttFormat').addEventListener('click', e => {
+      const b = e.target.closest('[data-v]'); if (!b) return;
+      state.stt.format = b.dataset.v;
+      $$('#segSttFormat [data-v]').forEach(x => x.classList.toggle('on', x === b));
+      if (state.stt.sample) state.stt.text = state.stt.format === 'srt' ? sttFormatSRT(state.stt.segments) : STT_SAMPLE_TEXT;
+      renderStt();
+      toast(state.stt.format === 'srt' ? 'SRT 자막으로 인식합니다 · 타임스탬프가 붙습니다' : '대본 텍스트로 인식합니다');
+    });
+    $('#btnSttRun').addEventListener('click', sttRun);
+    $('#btnSttSample').addEventListener('click', sttSample);
+    $('#btnSttCopy').addEventListener('click', () => copyText($('#sttResult').value, '인식 결과'));
+    $('#btnSttTxt').addEventListener('click', sttDownloadTxt);
+    $('#btnSttSrt').addEventListener('click', sttDownloadSrt);
+    $('#btnSttToScript').addEventListener('click', sttToScript);
+    $('#btnSttToCaption').addEventListener('click', sttToCaption);
+    let sttTimer = null;
+    $('#sttResult').addEventListener('input', () => {
+      const st = state.stt;
+      st.text = $('#sttResult').value;
+      st.sample = false;
+      clearTimeout(sttTimer);
+      sttTimer = setTimeout(() => { st.segments = sttParseSRT(st.text); renderStt(); }, 150);
+    });
+    $('#btnSubTlOff').addEventListener('click', () => {
+      state.subTl = null; updateSubTlUI(); drawPreview();
+      toast('STT 타이밍을 해제했습니다 · 음성/대본 길이 기준으로 돌아갑니다');
+    });
+
+    // ===== 도구 · 떡상 순위 & 6종 벤치마킹 =====
+    $('#btnTrendParse').addEventListener('click', trendParseFromInput);
+    $('#btnTrendSample').addEventListener('click', () => { $('#trendInput').value = TREND_SAMPLE_TEXT; trendLoadSample(); });
+    $('#btnTrendFile').addEventListener('click', () => $('#trendFileInput').click());
+    $('#trendFileInput').addEventListener('change', async e => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!f) return;
+      try {
+        const text = await f.text();
+        const list = (/\.json$/i.test(f.name) || /^[\[{]/.test(text.trim())) ? trendFromJSON(text) : trendParseText(text);
+        if (!list.length) { toast('파일에서 영상 줄을 찾지 못했습니다', 'bad'); return; }
+        const added = trendAddVideos(list, false);
+        toast(f.name + ' · ' + added + '개 추가' + (list.length - added ? ' (중복 ' + (list.length - added) + ')' : ''), 'good');
+      } catch (err) { toast(String(err.message || err), 'bad'); }
+    });
+    $('#btnTrendManual').addEventListener('click', () => { const b = $('#trendAddBox'); if (b) b.classList.toggle('hidden'); });
+    $('#btnTrendAdd').addEventListener('click', trendAddManual);
+    $('#btnTrendClear').addEventListener('click', () => {
+      state.trend.videos = []; state.trend.pickId = ''; state.trend.bench = null; state.trend.benchDemo = false;
+      saveTrend(); renderTrend(); renderBench();
+      toast('목록을 비웠습니다');
+    });
+    $('#trendTableBody').addEventListener('click', e => { const tr = e.target.closest('[data-trend]'); if (tr) trendPick(tr.dataset.trend); });
+    $('#trendPlatform').addEventListener('click', e => { const b = e.target.closest('[data-pf]'); if (!b) return; state.trend.platform = b.dataset.pf; saveTrend(); renderTrend(); });
+    $('#segTrendFilter').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; state.trend.filter = b.dataset.v; saveTrend(); renderTrend(); });
+    $('#trendSort').addEventListener('change', () => { state.trend.sort = $('#trendSort').value; saveTrend(); renderTrend(); });
+    [['#tpTitle', 'title'], ['#tpDesc', 'desc'], ['#tpCaptions', 'captions'], ['#tpMemo', 'memo']].forEach(pair => {
+      const el = $(pair[0]);
+      if (el) el.addEventListener('input', () => trendPickField(pair[1], el.value));
+    });
+    $('#btnTpStt').addEventListener('click', () => {
+      const v = trendPicked();
+      if (!v) { toast('영상을 먼저 고르세요', 'bad'); return; }
+      const t = sttPlainText() || state.stt.text;
+      if (!t) { toast('먼저 🎙️ 음성→텍스트에서 인식하거나 샘플을 채워 주세요', 'bad'); return; }
+      v.captions = t;
+      saveTrend(); renderTrend();
+      toast('STT 결과를 자막 칸에 넣었습니다' + (state.stt.sample ? ' (샘플)' : ''), 'good');
+    });
+    $('#btnTrendRemove').addEventListener('click', () => {
+      const v = trendPicked(); if (!v) return;
+      state.trend.videos = state.trend.videos.filter(x => x.id !== v.id);
+      state.trend.pickId = '';
+      saveTrend(); renderTrend();
+      toast('목록에서 뺐습니다');
+    });
+    $('#btnBenchRun').addEventListener('click', runBenchmark);
+    $('#btnBenchClear').addEventListener('click', () => { state.trend.bench = null; state.trend.benchDemo = false; saveTrend(); renderBench(); toast('벤치마킹 결과를 지웠습니다'); });
+    $('#btnBenchCopyAll').addEventListener('click', () => { const t = benchAllText(); if (!t) { toast('복사할 결과가 없습니다', 'bad'); return; } copyText(t, '6종 벤치마킹'); });
+    $('#btnBenchJson').addEventListener('click', () => {
+      const b = state.trend.bench;
+      if (!b) { toast('저장할 결과가 없습니다', 'bad'); return; }
+      const v = trendPicked();
+      const payload = { generatedAt: new Date().toISOString(), demo: !!state.trend.benchDemo,
+        video: v ? { title: v.title, channel: v.channel, platform: v.platform, subs: v.subs, views: v.views, score: trendScore(v) } : null, bench: b };
+      downloadText('bench-' + sttStamp() + '.json', JSON.stringify(payload, null, 2), 'application/json');
+      toast('JSON으로 저장했습니다', 'good');
+    });
+    $('#btnBenchMd').addEventListener('click', () => {
+      const md = benchMarkdown();
+      if (!md) { toast('저장할 결과가 없습니다', 'bad'); return; }
+      downloadText('bench-' + sttStamp() + '.md', md, 'text/markdown;charset=utf-8');
+      toast('MD로 저장했습니다', 'good');
+    });
+    $('#benchGrid').addEventListener('click', e => {
+      const c = e.target.closest('[data-bench-copy]');
+      if (c) { const t = benchTextOf(c.dataset.benchCopy); if (t) copyText(t, '벤치마킹'); return; }
+      const s = e.target.closest('[data-bench-send]');
+      if (s) benchSend(s.dataset.benchSend);
+    });
+
     $('#btnSettings').addEventListener('click', openSettings);
     $('#btnOpenSettings').addEventListener('click', openSettings);
     $('#btnCloseSettings').addEventListener('click', closeSettings);
@@ -3476,7 +4605,7 @@
   /* ---------------- init ---------------- */
   function init() {
     state.scriptOpts = { lang: 'ko', tone: 'friendly', length: 'normal' };
-    loadKeys(); loadPreset(); loadCoupang(); loadAccounts(); loadFamous(); loadMulti();
+    loadKeys(); loadPreset(); loadCoupang(); loadAccounts(); loadFamous(); loadMulti(); loadTrend();
     renderKeys(); updateModeUI(); updateAnalyzeHint(); renderAccounts();
     renderLinks(); renderFiles(); renderProduct(); renderRefs(); renderCart();
     renderScript(); renderVoiceNames(); renderTimeline(); renderScenes(); renderTitles(); renderThumb();
@@ -3485,6 +4614,7 @@
     if (gapSel) gapSel.value = String(state.voiceGap);
     const gapLab = $('#gapVal'); if (gapLab) gapLab.textContent = gapLabel(state.voiceGap);
     renderPerf(); renderMulti(); renderEraserOptions(); syncEraserInputs();
+    renderStt(); updateSubTlUI(); renderTrend(); renderBench();
     wire();
     goView('perf', { keepScroll: true });
     drawPreview();
@@ -3502,7 +4632,7 @@
     version: '2.0.0', state, PV, FAMOUS,
     goStep, goView, VIEW_ORDER, syncLinks, runAnalysis, writeScript, buildVoice, exportWebM, drawFrame, drawPreview,
     totalDuration, previewTimeline, suggestTitles, pickTitle, makeThumbBlob, downloadThumb,
-    buildHubTexts, renderHub, savePreset, loadPreset, renderKeys, renderHistory, saveCoupang,
+    buildHubTexts, renderHub, savePreset, loadPreset, renderKeys, renderHistory, saveCoupang, updateModeUI,
     addFiles, addHistoryFromProduct, togglePreview, stopPlayback, synthSpeechBuffer, bgmBuffer,
     disclosureText, autoLink, coupangLink, fillSampleLinks, isDemo: () => state.demo || !realKeys().length,
     // 새 화면·도구
@@ -3512,6 +4642,13 @@
     famousCandidates, exportFamousWebM, toggleFamousPlay, stopFamousPlay, recordClip,
     renderMulti, setMulti, multiCommand, parseMultiLinks,
     renderEraserOptions, syncEraserInputs, drawEraserFrame, drawEraserPreview, exportEraserWebM,
+    // STT
+    sttSetFile, sttRemoveFile, sttRun, sttSample, sttToScript, sttToCaption, sttDownloadTxt, sttDownloadSrt,
+    sttParseSRT, sttFormatSRT, sttSplitSentences, sttSplitCaptions, renderStt, updateSubTlUI, sttPlainText,
+    // 떡상 순위 & 벤치마킹
+    renderTrend, renderTrendPick, trendPick, trendList, trendScore, trendParseText, trendFromJSON, trendAddVideos,
+    trendParseFromInput, trendLoadSample, runBenchmark, renderBench, benchTextOf, benchAllText, benchMarkdown, benchSend,
+    TREND_SAMPLE_TEXT,
     setTime: t => { PV.t = clamp(t, 0, totalDuration()); drawPreview(); },
     setFamousTime: t => { FAMOUS.t = clamp(t, 0, famousDur()); drawFamousPreview(); },
     famousNow: () => FAMOUS.t,
