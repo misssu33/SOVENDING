@@ -7,6 +7,7 @@
   3) 1~2단계 링크 12개 제한·내 영상 업로드·대표 지정·데모 분석·레퍼런스/장바구니
   4) 3단계 4개 언어·톤·길이·제목 2줄·강조·문장 편집·합성 음성 실측 타임라인
   5) 4단계 장면 매칭/빼기/교체·가리기(블러/모자이크)·자막/제목/광고·BGM·프리셋
+ 5b) 4단계 자막 모션 15종(칩·캔버스 움직임·안전영역) · 스마트 자막 위치(여백 분석·얼굴 회피·폴백)
   6) 9:16 미리보기 재생·탐색 · WebM 내보내기(540×960, 오디오 포함)
   7) 5단계 제목 10개·설명/해시태그·썸네일 PNG 1080×1920
   8) 6단계 플랫폼 5종 문구·복사·업로드 링크·게시 확인 체크
@@ -796,6 +797,180 @@ with sync_playwright() as p:
     check(abs(state(pg, 'SV.now()') - state(pg, 'SV.previewTimeline()[2].start')) < 0.2, '장면 보기 = 해당 문장으로 이동')
 
     # =========================================================
+    section('6b. 4단계 · 자막 모션 15종 · 스마트 자막 위치')
+    MOTIONS = ['outline-basic', 'pop-bounce', 'typewriter', 'shift-key', 'chip-wipe', 'rise-lines',
+               'word-highlight', 'emoji-attach', 'count-up', 'random-appear', 'slide-in-top',
+               'jelly', 'led-marquee', 'zoom-swap', 'color-fill']
+    ids = state(pg, 'SV.CAP_MOTIONS.map(m=>m.id)')
+    check(ids == MOTIONS, '자막 모션 15종 목록·순서', ids)
+    check(pg.eval_on_selector_all('#capMotionChips .motion-chip', 'e=>e.length') == 15, '모션 칩 15개 렌더링')
+    check(pg.eval_on_selector_all('#capMotionChips .motion-chip .fam', 'e=>e.every(x=>x.textContent.trim())'), '모션 칩마다 계열 태그')
+    check(state(pg, 'SV.state.style.capMotion') == 'outline-basic', '기본 모션 = 기본 외곽선')
+    check('기본 외곽선' in pg.inner_text('#capMotionNow'), '선택 모션 이름 표시')
+
+    bad = []
+    for mid in MOTIONS:
+        pg.click(f'#capMotionChips [data-motion="{mid}"]')
+        pg.wait_for_timeout(45)
+        cls = pg.get_attribute(f'#capMotionChips [data-motion="{mid}"]', 'class') or ''
+        if state(pg, 'SV.state.style.capMotion') != mid or 'on' not in cls:
+            bad.append(mid)
+    check(not bad, '칩 15개 모두 선택·강조 동작', bad)
+    pg.click('#capMotionChips [data-motion="chip-wipe"]')
+    pg.wait_for_timeout(120)
+    check(pg.inner_text('#capMotionNow').strip() == '칩 와이프', '칩 이름이 라벨에 반영', pg.inner_text('#capMotionNow'))
+    check('칩' in pg.inner_text('#capMotionHint'), '모션 설명 문구 갱신', pg.inner_text('#capMotionHint'))
+
+    # 장면을 잠시 빼고(정적 배경) 자막만의 움직임을 해시로 본다
+    _mute0 = state(pg, 'SV.state.scenes.map(s=>!!s.muted)')
+    pg.evaluate('SV.state.scenes.forEach(s=>{s.muted=true}); SV.drawPreview()')
+    tl_m = state(pg, 'SV.previewTimeline()')
+    t_m = tl_m[0]['start']
+    anim = {}
+    for mid in MOTIONS:
+        pg.evaluate(f"SV.setCapMotion('{mid}')")
+        hs = []
+        for dt in (0.03, 0.22, 0.62):
+            pg.evaluate(f'SV.setTime({t_m} + {dt})')
+            hs.append(preview_hash(pg))
+        anim[mid] = len(set(hs))
+    check(anim['outline-basic'] == 1, '기본 외곽선은 시간이 지나도 같은 그림', anim['outline-basic'])
+    still = [k for k, v in anim.items() if v == 1 and k != 'outline-basic']
+    check(not still, '나머지 14종 모두 프레임이 움직임', still)
+    pg.evaluate("SV.setCapMotion('pop-bounce')")
+    pg.evaluate(f'SV.setTime({t_m} + 0.03)')
+    h_motion = preview_hash(pg)
+    pg.evaluate("SV.setCapMotion('outline-basic')")
+    pg.evaluate(f'SV.setTime({t_m} + 0.03)')
+    check(h_motion != preview_hash(pg), '같은 시각에서도 모션에 따라 그림이 달라짐')
+    pg.evaluate('SV.state.scenes.forEach((s,i)=>{s.muted=' + repr(_mute0).replace('True', 'true').replace('False', 'false') + '}); SV.drawPreview()')
+
+    # count-up: 숫자가 실제로 올라가는지(별도 캔버스에 직접 그려 확인)
+    cu = pg.evaluate("""() => {
+      const c = document.createElement('canvas'); c.width = 540; c.height = 960;
+      const g = c.getContext('2d', {willReadFrequently:true});
+      const st = JSON.parse(JSON.stringify(SV.state.style));
+      st.capMotion = 'count-up'; st.smartPlace = false;
+      const out = [];
+      for (const t of [0.05, 0.45, 1.2]) {
+        g.fillStyle = '#0b1020'; g.fillRect(0, 0, 540, 960);
+        SV.drawCaption(g, 540, 960, st, '조회수 120만원', [], t, 3, 0);
+        const d = g.getImageData(0, 0, 540, 960).data; let h = 2166136261;
+        for (let i = 0; i < d.length; i += 613) { h = ((h * 16777619) ^ d[i]) >>> 0; }
+        out.push(h);
+      }
+      return out;
+    }""")
+    check(len(set(cu)) == 3, 'count-up 숫자가 올라가며 그려짐', cu)
+
+    # 스마트 자막 위치 — 여백(복잡도) 분석은 순수 함수로 직접 검증
+    bands = pg.evaluate("""() => {
+      const w = 96, h = 171;
+      const busy = (y, x) => ((x * 37 + y * 91) % 255);
+      // 위쪽(0~38%)만 복잡하고 아래는 평평한 프레임
+      const lum = new Float32Array(w * h);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) lum[y * w + x] = (y < h * 0.38) ? busy(y, x) : 205;
+      const topBusy = SV.analyzeBands(lum, w, h, { capH: 18, yMin: 0.26, yMax: 0.92, base: 0.78, faces: [] });
+      // 아래쪽(55~95%)만 복잡한 프레임
+      const lum2 = new Float32Array(w * h);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) lum2[y * w + x] = (y > h * 0.55) ? busy(y, x) : 205;
+      const botBusy = SV.analyzeBands(lum2, w, h, { capH: 18, yMin: 0.26, yMax: 0.92, base: 0.78, faces: [] });
+      // 위와 같은 프레임 + 아래쪽 전체를 얼굴이 덮는 경우
+      const faced = SV.analyzeBands(lum, w, h, { capH: 18, yMin: 0.26, yMax: 0.92, base: 0.78,
+        faces: [{ x: 0, y: 0.5, w: 1, h: 0.45 }] });
+      return { topBusy: topBusy.best.yFrac, botBusy: botBusy.best.yFrac, faced: faced.best.yFrac,
+               facedOv: faced.best.faceOverlap, topBusyBands: topBusy.bands.length };
+    }""")
+    check(bands['topBusy'] > 0.45, '위가 복잡하면 아래 여백으로 내려감', round(bands['topBusy'], 3))
+    check(bands['botBusy'] < 0.55, '아래가 복잡하면 위 여백으로 올라감', round(bands['botBusy'], 3))
+    check(bands['faced'] < 0.5 and bands['facedOv'] == 0, '얼굴 영역을 피해 다른 띠로', [round(bands['faced'], 3), bands['facedOv']])
+    check(bands['topBusyBands'] >= 5, '띠 후보를 여러 개 비교', bands['topBusyBands'])
+
+    # 스마트 위치 켜기/끄기 · UI 안내
+    goto_step(pg, 4)
+    check(state(pg, 'SV.SMART.supported') is False, '테스트 브라우저는 FaceDetector 미지원')
+    check('여백 분석' in pg.inner_text('#smartPlaceBadge'), '미지원 브라우저는 여백 분석 배지')
+    check('얼굴 인식 미지원' in pg.inner_text('#smartPlaceNote'), '미지원 안내 문구(폴백)')
+    set_checked(pg, '#smartPlace', True)
+    pg.wait_for_timeout(200)
+    check(state(pg, 'SV.state.style.smartPlace') is True, '스마트 자막 위치 켜기')
+    check('여백' in pg.inner_text('#smartPlaceNote') and '켜짐' in pg.inner_text('#smartPlaceNote'), '켜짐 안내 문구')
+    check('자동' in pg.inner_text('#capYVal'), '스마트 켜면 자막 위치 라벨이 자동', pg.inner_text('#capYVal'))
+    pg.evaluate(f'SV.setTime({t_m} + 0.4)')
+    sm_on = state(pg, 'SV.lastCaption()')
+    check(sm_on['placed'] and sm_on['placed']['mode'] == 'band', '미지원 브라우저는 여백 분석으로 배치', sm_on['placed'] and sm_on['placed']['mode'])
+    check(sm_on['placed'] and len(sm_on['placed']['bands']) >= 1, '배치 근거(띠 점수) 계산', sm_on['placed']['bands'] if sm_on['placed'] else None)
+    set_checked(pg, '#smartPlace', False)
+    pg.wait_for_timeout(150)
+    pg.evaluate(f'SV.setTime({t_m} + 0.4)')
+    off_cap = state(pg, 'SV.lastCaption()')
+    check(off_cap['placed'] is None, '스마트 끄면 수동 위치(capY) 사용')
+    check(abs(off_cap['yCenter'] - state(pg, 'SV.state.style.capY') / 100 * 960) < 2, '수동 위치 = 자막 위치 슬라이더', round(off_cap['yCenter'], 1))
+
+    # 15종 모두 안전영역·고지 문구를 침범하지 않는다
+    set_checked(pg, '#smartPlace', True)
+    pg.wait_for_timeout(150)
+    rows = []
+    for mid in MOTIONS:
+        pg.evaluate(f"SV.setCapMotion('{mid}')")
+        pg.evaluate(f'SV.setTime({t_m} + 0.4)')
+        lc = state(pg, 'SV.lastCaption()')
+        rows.append((mid, lc['startY'], lc['bottom'], lc['adReserve'], lc['yCenter']))
+    out_bad = [r[0] for r in rows if r[1] < 960 * 0.22 - 1 or r[2] > r[3] + 0.6 or r[4] > 960 * 0.95]
+    check(not out_bad, '15종 모두 캔버스·안전영역 안', out_bad)
+    pg.click('#segAd button[data-v="coupang"]')
+    pg.wait_for_timeout(200)
+    cp_bad = []
+    for mid in ['zoom-swap', 'pop-bounce', 'jelly', 'chip-wipe']:
+        pg.evaluate(f"SV.setCapMotion('{mid}')")
+        pg.evaluate(f'SV.setTime({t_m} + 0.4)')
+        lc = state(pg, 'SV.lastCaption()')
+        if lc['bottom'] > lc['adReserve'] + 0.6 or abs(lc['adReserve'] - 960 * 0.757) > 1:
+            cp_bad.append(mid)
+    check(not cp_bad, '쿠팡 대가성 문구 위로 자막을 올림', cp_bad)
+    pg.click('#segAd button[data-v="ad"]')
+    pg.wait_for_timeout(150)
+
+    # 얼굴 인식 지원 브라우저(스텁) 경로
+    pg.evaluate("""() => {
+      window.FaceDetector = function () {};
+      window.FaceDetector.prototype.detect = function () {
+        return Promise.resolve([{ boundingBox: { x: 10, y: 88, width: 76, height: 52 } }]);
+      };
+      SV.SMART.supported = true; SV.SMART.det = null; SV.SMART.faces = []; SV.SMART.facesAt = 0; SV.SMART.key = '';
+      SV.updateSmartNote();
+    }""")
+    pg.evaluate("SV.setCapMotion('outline-basic')")
+    for i in range(5):
+        pg.evaluate(f'SV.setTime({t_m} + 0.2 + {i} * 0.2)')
+        pg.wait_for_timeout(180)
+    pg.evaluate(f'SV.setTime({t_m} + 1.2)')
+    pg.wait_for_timeout(200)
+    fc = state(pg, 'SV.lastCaption()')
+    check(pg.inner_text('#smartPlaceBadge').strip() == '얼굴+여백', '지원 브라우저는 얼굴+여백 배지', pg.inner_text('#smartPlaceBadge'))
+    check('얼굴 인식' in pg.inner_text('#smartPlaceNote') and '지원' in pg.inner_text('#smartPlaceNote'), '지원 안내 문구')
+    check(state(pg, 'SV.SMART.faces.length') == 1, 'FaceDetector 결과 반영', state(pg, 'SV.SMART.faces'))
+    check(fc['placed'] and fc['placed']['mode'] == 'face', '얼굴 감지 시 mode=face', fc['placed'] and fc['placed']['mode'])
+    check(fc['placed'] and fc['placed']['faceOverlap'] == 0, '자막이 얼굴과 겹치지 않음', fc['placed'] and fc['placed']['faceOverlap'])
+    face_box = state(pg, 'SV.SMART.faces[0]')
+    cap_top, cap_bot = fc['startY'] / 960, fc['bottom'] / 960
+    overlap = not (cap_bot <= face_box['y'] or cap_top >= face_box['y'] + face_box['h'])
+    check(not overlap, '얼굴 띠(%.2f~%.2f) 밖에 자막(%.2f~%.2f)' % (face_box['y'], face_box['y'] + face_box['h'], cap_top, cap_bot))
+    pg.evaluate("() => { delete window.FaceDetector; SV.SMART.supported = false; SV.SMART.det = null; SV.SMART.faces = []; SV.SMART.key = ''; SV.updateSmartNote(); }")
+    pg.wait_for_timeout(150)
+    check('여백 분석' in pg.inner_text('#smartPlaceBadge'), '스텁 해제 후 여백 분석 배지로 복귀')
+
+    # 스마트 위치는 저장·복원된다
+    set_checked(pg, '#presetRemember', True)
+    pg.wait_for_timeout(300)
+    check(state(pg, 'JSON.parse(localStorage.getItem("sv.preset.v1")).style.smartPlace') is True, '스마트 위치 설정 저장')
+    check(state(pg, 'JSON.parse(localStorage.getItem("sv.preset.v1")).style.capMotion') == 'outline-basic', '모션 선택도 저장')
+    # 다음 단계(내보내기)를 위해 모션은 팝·바운스, 스마트는 끈다
+    pg.evaluate("SV.setCapMotion('pop-bounce')")
+    set_checked(pg, '#smartPlace', False)
+    pg.wait_for_timeout(150)
+
+    # =========================================================
     section('7. 9:16 미리보기 · WebM 내보내기')
     check(pg.inner_text('#pvRes').strip() == '540×960', '미리보기 해상도 표시')
     cvr = pg.evaluate("""() => { const r=document.querySelector('#previewCanvas').getBoundingClientRect(); return r.width/r.height; }""")
@@ -873,6 +1048,21 @@ with sync_playwright() as p:
     check(saved.exists() and saved.stat().st_size > 150000, 'WebM 파일 다운로드', f'{saved.stat().st_size:,}B')
     check(d.suggested_filename.endswith('.webm'), '파일명 .webm', d.suggested_filename)
     check(state(pg, 'SV.state.history.length') >= 1, '내보내면 링크 히스토리 자동 추가')
+
+    # 스마트 위치 + 자막 모션을 켜도 내보내기가 같은 drawFrame 경로로 돈다
+    set_checked(pg, '#smartPlace', True)
+    pg.evaluate("SV.setCapMotion('typewriter')")
+    pg.wait_for_timeout(200)
+    t0b = time.time()
+    blob2 = pg.evaluate("async () => { const b = await SV.exportWebM(); return b ? {size:b.size, type:b.type} : null; }")
+    took2 = time.time() - t0b
+    check(blob2 and blob2['size'] > 150000, '스마트 위치·모션 켜고 WebM 생성', blob2)
+    check(abs(took2 - exp_total) < 6, '스마트 분석을 켜도 실시간 녹화 시간 유지', f'{took2:.1f}s / {exp_total:.1f}s')
+    lc2 = state(pg, 'SV.lastCaption()')
+    check(lc2 and lc2['placed'] is not None and lc2['motion'] == 'typewriter', '내보내기 프레임에도 모션·스마트 배치', [lc2['motion'] if lc2 else None, lc2['placed'] and lc2['placed']['mode']])
+    set_checked(pg, '#smartPlace', False)
+    pg.evaluate("SV.setCapMotion('outline-basic')")
+    pg.wait_for_timeout(150)
 
     # =========================================================
     section('8. 5단계 · 제목 10개·썸네일 PNG')

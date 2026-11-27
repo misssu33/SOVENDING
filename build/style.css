@@ -840,3 +840,21 @@ pre.cmd{
 .recipe-card .card-head{margin-bottom:8px}
 .recipe-card h3{font-size:12.5px;font-weight:800}
 .recipe-card .card.inner{padding:10px;margin-top:6px}
+
+/* ---- 자막 모션 15종 · 스마트 자막 위치 ---- */
+.motion-chips{gap:5px}
+.motion-chip{background:#0d151f;border:1.5px solid var(--line);border-radius:10px;padding:6px 9px;font-size:11px;
+  font-weight:700;color:#c3cfdd;display:inline-flex;align-items:center;gap:5px;transition:.15s;cursor:pointer}
+.motion-chip:hover{border-color:#3a4d66;color:#fff}
+.motion-chip.on{border-color:rgba(47,227,176,.6);box-shadow:0 0 0 2px rgba(47,227,176,.16);color:#eafff9;
+  background:linear-gradient(180deg,#122a26,#0d1a1d)}
+.motion-chip .fam{font-size:9px;font-weight:800;padding:1px 5px;border-radius:5px;background:#16212e;color:#8ea6bf}
+.motion-chip.on .fam{background:rgba(47,227,176,.18);color:#9df5de}
+.motion-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.motion-hint{margin-top:5px;font-size:10.5px;color:var(--dim);line-height:1.5}
+.smart-box{margin-top:10px;border:1px solid var(--line);border-radius:11px;padding:9px 10px;background:#0b131c}
+.smart-box .row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.smart-box .note{font-size:10.5px;color:var(--dim);line-height:1.5;margin-top:4px}
+.smart-box .note b{color:var(--acc2);font-weight:700}
+.smart-box .note .ok{color:var(--acc2)}
+.smart-box .note .warn{color:var(--warn)}

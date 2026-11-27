@@ -445,6 +445,18 @@
               <div class="ctrl"><label>색상</label>
                 <div class="row" style="gap:6px"><input type="color" id="capColor" value="#ffffff" aria-label="자막 색상"><input type="color" id="capStroke" value="#000000" aria-label="자막 외곽선 색상"><span class="hint" style="font-size:10px">글자·외곽선</span></div>
               </div>
+              <div class="ctrl wide">
+                <label>자막 모션 <em style="font-style:normal;color:var(--dim)">15종 · 1탄 모션 라이브러리</em> <b id="capMotionNow">기본 외곽선</b></label>
+                <div class="type-chips motion-chips" id="capMotionChips" role="group" aria-label="자막 모션 15종"></div>
+                <span class="motion-hint" id="capMotionHint">움직이지 않는 기본 외곽선입니다.</span>
+              </div>
+            </div>
+            <div class="smart-box">
+              <div class="row">
+                <label class="switch"><input type="checkbox" id="smartPlace"> 스마트 자막 위치 <span style="color:var(--dim);font-weight:400">(얼굴·여백 자동 회피)</span></label>
+                <span class="badge" id="smartPlaceBadge">여백 분석</span>
+              </div>
+              <p class="note" id="smartPlaceNote">켜면 장면에서 <b>가장 한산한 띠</b>를 찾아 자막을 자동으로 옮깁니다. 얼굴 인식을 지원하는 브라우저에서는 얼굴도 피합니다.</p>
             </div>
             <div class="row between hidden" id="subTlBar" style="margin-top:9px">
               <span class="hint" id="subTlInfo">STT 타임스탬프로 자막을 보여줍니다.</span>

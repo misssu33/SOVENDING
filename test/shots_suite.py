@@ -79,6 +79,19 @@ with sync_playwright() as p:
     pg.wait_for_timeout(300)
     pg.screenshot(path=str(SHOTS / '04c-step4-hero.png'))
 
+    # step 4 — 자막 모션 15종 · 스마트 자막 위치 카드
+    pg.evaluate("SV.setCapMotion('chip-wipe')")
+    pg.evaluate("SV.setSmartPlace(true)")
+    pg.evaluate('SV.setTime(1.4)')
+    pg.wait_for_timeout(500)
+    pg.evaluate("() => { const el=document.querySelector('#capMotionChips'); el.scrollIntoView({block:'center'}); }")
+    pg.wait_for_timeout(400)
+    pg.screenshot(path=str(SHOTS / '04d-step4-motion.png'))
+    pg.evaluate("SV.setSmartPlace(false)")
+    pg.evaluate("SV.setCapMotion('outline-basic')")
+    pg.evaluate("() => { document.querySelector('#segAd button[data-v=\"ad\"]').click(); }")
+    pg.wait_for_timeout(200)
+
     # step 5
     pg.evaluate('SV.goStep(5)')
     pg.click('#btnSuggestTitles')
@@ -157,6 +170,11 @@ with sync_playwright() as p:
     mp.wait_for_timeout(500)
     mp.evaluate('window.scrollTo(0,0)')
     mp.screenshot(path=str(SHOTS / '10-mobile-step4.png'))
+    mp.evaluate("SV.setCapMotion('pop-bounce')")
+    mp.evaluate("() => { const el=document.querySelector('#capMotionChips'); el.scrollIntoView({block:'center'}); }")
+    mp.wait_for_timeout(400)
+    mp.screenshot(path=str(SHOTS / '10b-mobile-motion.png'))
+    mp.evaluate("SV.setCapMotion('outline-basic')")
     mp.evaluate('SV.goStep(3)')
     mp.wait_for_timeout(300)
     mp.screenshot(path=str(SHOTS / '11-mobile-step3.png'))

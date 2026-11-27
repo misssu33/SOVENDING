@@ -96,6 +96,7 @@
       blurOn: true, blurMode: 'blur', blurY: 55, blurH: 18, blurStrength: 18,
       titleOn: true, highlightOn: true,
       capSize: 32, capY: 78, capFont: 'sans', capColor: '#ffffff', capStroke: '#000000',
+      capMotion: 'outline-basic', smartPlace: false,
       bgm: 'upbeat', bgmVol: 18, ad: 'ad'
     },
     titles: null,
@@ -2036,6 +2037,607 @@
     return { x, y: H * AD_SAFE.top, w, h, tx: x + pad, align: 'left' };
   }
 
+  /* ================================================================
+     자막 모션 15종 (1탄 motion-library 이식) + 스마트 자막 위치
+     ----------------------------------------------------------------
+     외부 의존성 0. 계산·레이아웃·그리기를 모두 이 파일 안에서 한다.
+     미리보기(#previewCanvas)와 WebM 내보내기(MediaRecorder)가 같은 drawFrame()을
+     쓰므로, 같은 모션 코드가 두 경로에 그대로 적용된다.
+     ================================================================ */
+  const CAP_MOTIONS = [
+    { id: 'outline-basic', label: '기본 외곽선', family: '기본', note: '움직이지 않는 안전한 기본값입니다. 흰 글자 + 검은 외곽선.' },
+    { id: 'pop-bounce', label: '팝·바운스', family: '스케일', note: '낱말마다 0.55배에서 튕겨 올라옵니다. 숏폼에서 가장 무난한 기본 모션.' },
+    { id: 'typewriter', label: '타자기', family: '등장', note: '한 글자씩 찍히고 커서가 깜빡입니다. 정보형 첫 문장에 어울립니다.' },
+    { id: 'shift-key', label: '시프트 키', family: '낱말', note: '낱말이 또각또각 박히듯 1.35배에서 내려앉습니다. 핵심 낱말 강조.' },
+    { id: 'chip-wipe', label: '칩 와이프', family: '배경', note: '어두운 칩이 좌→우로 깔리고 그 위로 글자가 드러납니다. 소제목용.' },
+    { id: 'rise-lines', label: '줄마다 올라오기', family: '줄', note: '줄 단위로 아래에서 올라오며 나타납니다. 2줄 설명·브릿지 자막.' },
+    { id: 'word-highlight', label: '낱말 강조', family: '색', note: '강조 낱말만 노란색으로 커졌다 작아지며 맥동합니다. 명사·숫자 강조.' },
+    { id: 'emoji-attach', label: '이모지 부착', family: '장식', note: '문장 끝에 리액션 이모지가 톡 붙습니다. 문장 내용에 맞춰 이모지를 고릅니다.' },
+    { id: 'count-up', label: '숫자 카운트', family: '숫자', note: '숫자가 0에서 목표값까지 올라갑니다. 조회수·기간·금액에 적합.' },
+    { id: 'random-appear', label: '무작위 등장', family: '등장', note: '글자가 제각각 순서로 톡톡 나타납니다. 의성어·짧은 감탄.' },
+    { id: 'slide-in-top', label: '위에서 내려오기', family: '이동', note: '문장 전체가 위에서 내려옵니다. 컷 직후 새 정보를 넣을 때.' },
+    { id: 'jelly', label: '젤리 글자', family: '스케일', note: '글자마다 젤리처럼 출렁이며 등장합니다. 귀여운 예능 톤.' },
+    { id: 'led-marquee', label: 'LED 전광판', family: '반복', note: '전광판처럼 글자가 차례로 켜지고 색이 흘러갑니다. 짧은 문구 반복.' },
+    { id: 'zoom-swap', label: '줌 아웃 교체', family: '스케일', note: '1.65배에서 줄어들며 등장하고, 끝나면 작아지며 사라집니다.' },
+    { id: 'color-fill', label: '색 입히기', family: '색', note: '흰 글자에 강조색이 좌→우로 채워집니다. 결론 문장·유도 한 줄.' }
+  ];
+  const MOTION_BY_ID = {};
+  CAP_MOTIONS.forEach(m => { MOTION_BY_ID[m.id] = m; });
+  // 모션이 순간적으로 커지는 배율 — 광고·고지 문구와 겹치지 않게 자리 계산에 쓴다
+  const CAP_MAX_SCALE = { 'pop-bounce': 1.22, 'zoom-swap': 1.65, 'jelly': 1.34, 'shift-key': 1.35, 'word-highlight': 1.16, 'emoji-attach': 1.15 };
+
+  const EASE = {
+    outCubic: p => 1 - Math.pow(1 - p, 3),
+    inCubic: p => p * p * p,
+    inOutCubic: p => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2,
+    outBack: (p, s) => { s = s == null ? 1.70158 : s; const c = s + 1; return 1 + c * Math.pow(p - 1, 3) + s * Math.pow(p - 1, 2); },
+    outExpo: p => p >= 1 ? 1 : 1 - Math.pow(2, -10 * p)
+  };
+  const EMOJI_FONT = '"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji","Noto Emoji",sans-serif';
+
+  function toRgb(h) {
+    const s = String(h || '#ffffff').replace('#', '');
+    const n = parseInt(s.length === 3 ? s.split('').map(c => c + c).join('') : s, 16);
+    return isFinite(n) ? [(n >> 16) & 255, (n >> 8) & 255, n & 255] : [255, 255, 255];
+  }
+  function mixColor(a, b, t) {
+    const A = toRgb(a), B = toRgb(b); t = clamp(t, 0, 1);
+    return 'rgb(' + Math.round(A[0] + (B[0] - A[0]) * t) + ',' + Math.round(A[1] + (B[1] - A[1]) * t) + ',' + Math.round(A[2] + (B[2] - A[2]) * t) + ')';
+  }
+
+  const EMOJI_RULES = [
+    [/(할인|가격|최저가|반값|원\b|쿠팡)/, '💰'],
+    [/(불|화재|뜨거|열기|화력)/, '🔥'],
+    [/(물|세척|씻|습기|비가|곰팡)/, '💧'],
+    [/(먹|맛|요리|음식|식사)/, '😋'],
+    [/(빠르|속도|초만|분이면|즉시)/, '⚡'],
+    [/(청소|먼지|정리|수납)/, '🧹'],
+    [/(운동|다이어트|무게|가볍)/, '💪'],
+    [/(잠|수면|밤에)/, '🌙'],
+    [/(아이|아기|반려|강아지|고양이|펫)/, '🐾'],
+    [/(주의|위험|실수|사고)/, '⚠️'],
+    [/(추천|좋아|최고|만족|후회)/, '👍']
+  ];
+  function pickEmoji(text) {
+    const s = String(text || '');
+    for (const [re, e] of EMOJI_RULES) if (re.test(s)) return e;
+    return '✨';
+  }
+
+  /* --- 레이아웃: 단어·글자 단위로 x 좌표까지 계산한다(모션이 글자마다 움직이려면 필요) --- */
+  function captionLayout(ctx, text, maxW, font, hlWords) {
+    ctx.font = font;
+    const space = ctx.measureText(' ').width;
+    const words = String(text || '').split(/\s+/).filter(Boolean);
+    const rows = []; let cur = [], curW = 0;
+    for (const w of words) {
+      const ww = ctx.measureText(w).width;
+      if (cur.length && curW + space + ww > maxW) { rows.push(cur); cur = [w]; curW = ww; }
+      else { cur.push(w); curW += (cur.length > 1 ? space : 0) + ww; }
+    }
+    if (cur.length) rows.push(cur);
+    const hl = hlWords || [];
+    let width = 0;
+    const lines = rows.map(line => {
+      const widths = line.map(w => ctx.measureText(w).width);
+      const total = widths.reduce((a, b) => a + b, 0) + space * Math.max(0, line.length - 1);
+      width = Math.max(width, total);
+      let x = -total / 2;
+      const ws = line.map((w, i) => {
+        const chars = []; let cx = x;
+        for (const ch of Array.from(w)) { const cw = ctx.measureText(ch).width; chars.push({ ch, x: cx + cw / 2, w: cw }); cx += cw; }
+        const nw = normWord(w);
+        const isHl = hl.some(h => nw && h && (nw === h || (h.length > 1 && nw.includes(h))));
+        const o = { text: w, x: x + widths[i] / 2, w: widths[i], chars, hl: isHl };
+        x += widths[i] + space;
+        return o;
+      });
+      return { words: ws, width: total };
+    });
+    return { space, lines, width };
+  }
+
+  function captionModel(ctx, W, H, text, st, hlWords) {
+    let fs = Math.round(st.capSize * (W / 540));
+    const maxW = W * 0.9;
+    const fam = FONT_STACK[st.capFont] || FONT_STACK.sans;
+    let font = '', lay = null;
+    // 자막은 최대 4줄: 넘치면 글자를 줄여 영상 밖으로 나가지 않게 한다
+    for (let guard = 0; guard < 14; guard++) {
+      font = '800 ' + fs + 'px ' + fam;
+      lay = captionLayout(ctx, text, maxW, font, hlWords);
+      if (lay.lines.length <= 4 || fs <= 18) break;
+      fs -= 2;
+    }
+    return { fs, font, lineH: fs * 1.28, space: lay.space, lines: lay.lines, width: lay.width };
+  }
+
+  /* --- 그리기 기본기: 외곽선 + 채우기 한 덩어리 --- */
+  function paintText(ctx, str, cx, cy, o) {
+    o = o || {};
+    const a = clamp((o.alpha == null ? 1 : o.alpha) * (o.fade == null ? 1 : o.fade), 0, 1);
+    if (a <= 0.004 || !str) return;
+    ctx.save();
+    ctx.globalAlpha = clamp(ctx.globalAlpha * a, 0, 1);
+    ctx.translate(cx + (o.dx || 0), cy + (o.dy || 0));
+    if (o.rot) ctx.rotate(o.rot * Math.PI / 180);
+    const sx = o.scaleX != null ? o.scaleX : (o.scale == null ? 1 : o.scale);
+    const sy = o.scaleY != null ? o.scaleY : (o.scale == null ? 1 : o.scale);
+    if (sx !== 1 || sy !== 1) ctx.scale(sx, sy);
+    if (o.font) ctx.font = o.font;
+    ctx.fillStyle = o.color || '#ffffff';
+    if (o.sw > 0) {
+      ctx.strokeStyle = o.stroke || '#000000'; ctx.lineWidth = o.sw;
+      ctx.lineJoin = 'round'; ctx.miterLimit = 2;
+      ctx.strokeText(str, 0, 0);
+    }
+    ctx.fillText(str, 0, 0);
+    ctx.restore();
+  }
+
+  function countText(str, e) {
+    return String(str).replace(/\d[\d,]*(?:\.\d+)?/g, m => {
+      const dec = (m.split('.')[1] || '').length;
+      const raw = Number(m.replace(/,/g, ''));
+      if (!isFinite(raw)) return m;
+      const v = raw * e;
+      let out = dec ? v.toFixed(dec) : String(Math.round(v));
+      if (m.includes(',')) out = Number(out).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+      return out;
+    });
+  }
+
+  /* --- 15종 렌더러 --- */
+  const CAP_RENDER = {
+    'outline-basic'(ctx, M) {
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        for (const w of line.words) paintText(ctx, w.text, M.cx + w.x, cy, { color: w.hl ? M.accent : M.base, sw: M.sw, stroke: M.stroke, fade: M.exitFade });
+      });
+    },
+
+    'pop-bounce'(ctx, M) {
+      let g = 0;
+      const breathe = 1 + 0.012 * Math.sin(M.lt * (Math.PI * 2 / 2.2));
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        for (const w of line.words) {
+          const p = clamp((M.lt - g * 0.085) / 0.34, 0, 1);
+          const e = EASE.outBack(p, 1.7);
+          paintText(ctx, w.text, M.cx + w.x, cy, {
+            alpha: clamp(p * 3.2, 0, 1), fade: M.exitFade,
+            scale: (0.55 + 0.45 * e) * breathe,
+            dy: 0.18 * M.fs * (1 - e), rot: -4 * (1 - e),
+            color: w.hl ? M.accent : M.base, sw: M.sw, stroke: M.stroke
+          });
+          g++;
+        }
+      });
+    },
+
+    typewriter(ctx, M) {
+      let gi = 0, lastC = null, lastCy = 0;
+      const totalCh = M.lines.reduce((a, l) => a + l.words.reduce((b, w) => b + w.chars.length, 0), 0);
+      const step = Math.min(0.045, (M.dur * 0.72) / Math.max(1, totalCh));
+      const n = Math.floor(M.lt / step) + 1;
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        for (const w of line.words) {
+          for (const c of w.chars) {
+            if (gi < n) {
+              paintText(ctx, c.ch, M.cx + c.x, cy, { color: w.hl ? M.accent : M.base, sw: M.sw, stroke: M.stroke, fade: M.exitFade });
+              lastC = c; lastCy = cy;
+            }
+            gi++;
+          }
+        }
+      });
+      if (lastC && n <= totalCh && Math.sin(M.lt * 9) > -0.2) {
+        paintText(ctx, '|', M.cx + lastC.x + lastC.w / 2 + M.fs * 0.07, lastCy, { color: M.accent, sw: M.sw * 0.6, stroke: M.stroke, alpha: 0.9, fade: M.exitFade });
+      }
+    },
+
+    'shift-key'(ctx, M) {
+      let g = 0;
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        for (const w of line.words) {
+          const p = clamp((M.lt - g * 0.07) / 0.2, 0, 1);
+          const e = EASE.outBack(p, 3.4);
+          paintText(ctx, w.text, M.cx + w.x, cy, {
+            alpha: clamp(p * 2.6, 0, 1), fade: M.exitFade,
+            scale: 1.35 - 0.35 * e, dy: -0.06 * M.fs * (1 - e),
+            color: w.hl ? M.accent : M.base, sw: M.sw, stroke: M.stroke
+          });
+          g++;
+        }
+      });
+    },
+
+    'chip-wipe'(ctx, M) {
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        const p = clamp((M.lt - li * 0.09) / 0.42, 0, 1);
+        const e = EASE.outCubic(p);
+        const padX = M.fs * 0.5, h = M.fs * 1.26;
+        const full = line.width + padX * 2;
+        const x0 = M.cx - line.width / 2 - padX, y0 = cy - h / 2;
+        const w = Math.max(2, full * (0.03 + 0.97 * e));
+        ctx.save();
+        ctx.globalAlpha = clamp(ctx.globalAlpha * clamp(p * 5, 0, 1) * M.exitFade, 0, 1);
+        roundRect(ctx, x0, y0, w, h, Math.min(h * 0.3, w / 2)); ctx.fillStyle = 'rgba(8,12,18,.80)'; ctx.fill();
+        ctx.fillStyle = M.accent; roundRect(ctx, x0 + 3, y0 + 3, Math.min(6, w * 0.18), h - 6, 3); ctx.fill();
+        ctx.restore();
+        ctx.save();
+        ctx.beginPath(); ctx.rect(x0, y0, w, h); ctx.clip();
+        for (const wd of line.words) paintText(ctx, wd.text, M.cx + wd.x, cy, { color: wd.hl ? M.accent : M.base, sw: M.sw, stroke: M.stroke, fade: M.exitFade });
+        ctx.restore();
+      });
+    },
+
+    'rise-lines'(ctx, M) {
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        const p = clamp((M.lt - li * 0.12) / 0.5, 0, 1);
+        const dy = 0.5 * M.fs * (1 - EASE.outCubic(p));
+        for (const w of line.words) paintText(ctx, w.text, M.cx + w.x, cy + dy, { alpha: clamp(p * 1.6, 0, 1), fade: M.exitFade, color: w.hl ? M.accent : M.base, sw: M.sw, stroke: M.stroke });
+      });
+    },
+
+    'word-highlight'(ctx, M) {
+      let g = 0;
+      const appear = clamp(M.lt / 0.22, 0, 1);
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        for (const w of line.words) {
+          const hot = w.hl || (M.hlFallback && !M.hlAny && w.text === M.hlFallback);
+          const p = hot ? clamp((M.lt - 0.15 - g * 0.08) / 0.2, 0, 1) : 0;
+          const pulse = hot ? 0.5 + 0.5 * Math.sin(M.lt * 4.4 - g * 0.8) : 0;
+          paintText(ctx, w.text, M.cx + w.x, cy, {
+            alpha: appear, fade: M.exitFade,
+            scale: hot ? 1 + 0.16 * pulse * p : 1,
+            color: hot ? M.accent : M.base, sw: M.sw, stroke: M.stroke
+          });
+          g++;
+        }
+      });
+    },
+
+    'emoji-attach'(ctx, M) {
+      let g = 0;
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        for (const w of line.words) {
+          const p = clamp((M.lt - g * 0.03) / 0.25, 0, 1);
+          paintText(ctx, w.text, M.cx + w.x, cy, { alpha: p, fade: M.exitFade, dy: 0.08 * M.fs * (1 - p), color: w.hl ? M.accent : M.base, sw: M.sw, stroke: M.stroke });
+          g++;
+        }
+      });
+      const line = M.lines[M.lines.length - 1];
+      if (!line) return;
+      const pe = clamp((M.lt - 0.42) / 0.34, 0, 1);
+      if (pe <= 0.01) return;
+      const eb = EASE.outBack(pe, 2.6);
+      const cy = M.startY + (M.lines.length - 1) * M.lineH;
+      const ex = Math.min(M.W - M.fs * 0.5, M.cx + line.width / 2 + M.fs * 0.5);
+      const ey = cy - M.fs * 0.2 - Math.abs(Math.sin(M.lt * 3)) * M.fs * 0.05;
+      ctx.save();
+      ctx.globalAlpha = clamp(ctx.globalAlpha * clamp(pe * 2, 0, 1) * M.exitFade, 0, 1);
+      ctx.translate(ex, ey);
+      ctx.rotate((-8 * (1 - eb)) * Math.PI / 180);
+      const s = Math.max(0.01, 0.45 + 0.55 * eb);
+      ctx.scale(s, s);
+      ctx.font = Math.round(M.fs * 0.9) + 'px ' + EMOJI_FONT;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(M.emoji, 0, 0);
+      ctx.restore();
+    },
+
+    'count-up'(ctx, M) {
+      if (!M.hasNum) return CAP_RENDER.typewriter(ctx, M);
+      let g = 0;
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        for (const w of line.words) {
+          const p = clamp((M.lt - 0.04) / 0.9, 0, 1);
+          const e = EASE.outExpo(p);
+          const txt = countText(w.text, e);
+          const pop = p > 0.86 ? 1 + 0.07 * Math.sin((p - 0.86) / 0.14 * Math.PI) : 1;
+          const appears = /\d/.test(w.text) ? 1 : clamp((M.lt - 0.2 - g * 0.02) / 0.25, 0, 1);
+          paintText(ctx, txt, M.cx + w.x, cy, { alpha: appears, fade: M.exitFade, scale: pop, color: w.hl ? M.accent : M.base, sw: M.sw, stroke: M.stroke });
+          g++;
+        }
+      });
+    },
+
+    'random-appear'(ctx, M) {
+      let gi = 0;
+      const seedBase = hash32(M.text || 'x');
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        for (const w of line.words) {
+          for (const c of w.chars) {
+            const r = rng((seedBase + gi * 2654435761) >>> 0);
+            const delay = 0.04 + r() * 0.42;
+            const p = clamp((M.lt - delay) / 0.3, 0, 1);
+            const e = EASE.outBack(p, 2.2);
+            paintText(ctx, c.ch, M.cx + c.x, cy, {
+              alpha: clamp(p * 2.6, 0, 1), fade: M.exitFade,
+              scale: 0.62 + 0.38 * e,
+              dy: (r() * 2 - 1) * 0.12 * M.fs * (1 - e),
+              rot: (r() * 2 - 1) * 8 * (1 - e),
+              color: w.hl ? M.accent : M.base, sw: M.sw, stroke: M.stroke
+            });
+            gi++;
+          }
+        }
+      });
+    },
+
+    'slide-in-top'(ctx, M) {
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        const p = clamp((M.lt - li * 0.06) / 0.42, 0, 1);
+        const dy = -0.6 * M.fs * (1 - EASE.outCubic(p));
+        for (const w of line.words) paintText(ctx, w.text, M.cx + w.x, cy + dy, { alpha: clamp(p * 2.6, 0, 1), fade: M.exitFade, color: w.hl ? M.accent : M.base, sw: M.sw, stroke: M.stroke });
+      });
+    },
+
+    jelly(ctx, M) {
+      let gi = 0;
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        for (const w of line.words) {
+          for (const c of w.chars) {
+            const t2 = Math.max(0, M.lt - gi * 0.035);
+            const damp = Math.exp(-4.6 * t2);
+            const wob = Math.sin(t2 * 17) * damp;
+            paintText(ctx, c.ch, M.cx + c.x, cy + 0.08 * M.fs * wob, {
+              alpha: clamp(t2 * 9, 0, 1), fade: M.exitFade,
+              scale: 1 + 0.34 * wob, rot: 7 * wob,
+              color: w.hl ? M.accent : M.base, sw: M.sw, stroke: M.stroke
+            });
+            gi++;
+          }
+        }
+      });
+    },
+
+    'led-marquee'(ctx, M) {
+      const left = M.cx - M.width / 2;
+      const span = Math.max(1, M.width);
+      const sweep = ((M.lt * 0.9) % 1.7) - 0.35;
+      const blink = 0.86 + 0.14 * Math.sin(M.lt * 7.5);
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        for (const w of line.words) {
+          for (const c of w.chars) {
+            const u = (M.cx + c.x - left) / span;
+            const lit = clamp(1 - Math.abs(u - sweep) * 1.5, 0, 1);
+            const col = mixColor(M.base, M.accent, lit);
+            paintText(ctx, c.ch, M.cx + c.x, cy, { alpha: (0.52 + 0.48 * lit) * blink, fade: M.exitFade, color: col, sw: M.sw, stroke: M.stroke });
+          }
+        }
+      });
+    },
+
+    'zoom-swap'(ctx, M) {
+      const p = clamp(M.lt / 0.36, 0, 1);
+      const e = EASE.outCubic(p);
+      const pe = clamp((M.lt - (M.dur - 0.22)) / 0.22, 0, 1);
+      let s = (1.65 - 0.65 * e) * (1 - 0.28 * pe);
+      const fit = M.width > 1 ? Math.min(1, (M.W * 0.96) / M.width) : 1;
+      if (s > 1) s = 1 + (s - 1) * fit;
+      const cy = M.startY + (M.lines.length - 1) * M.lineH / 2;
+      ctx.save();
+      ctx.globalAlpha = clamp(ctx.globalAlpha * clamp(p * 2.2, 0, 1) * (1 - pe), 0, 1);
+      ctx.translate(M.cx, cy); ctx.scale(s, s); ctx.translate(-M.cx, -cy);
+      M.lines.forEach((line, li) => {
+        const yy = M.startY + li * M.lineH;
+        for (const w of line.words) paintText(ctx, w.text, M.cx + w.x, yy, { color: w.hl ? M.accent : M.base, sw: M.sw / s, stroke: M.stroke });
+      });
+      ctx.restore();
+    },
+
+    'color-fill'(ctx, M) {
+      const appear = clamp(M.lt / 0.16, 0, 1);
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        for (const w of line.words) paintText(ctx, w.text, M.cx + w.x, cy, { alpha: appear, fade: M.exitFade, color: M.base, sw: M.sw, stroke: M.stroke });
+      });
+      const p = EASE.inOutCubic(clamp(M.lt / 0.7, 0, 1));
+      if (p <= 0.001) return;
+      const x0 = M.cx - M.width / 2 - M.fs * 0.2;
+      const wAll = (M.width + M.fs * 0.4) * p;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x0, M.startY - M.lineH, Math.max(0.5, wAll), M.lineH * (M.lines.length + 0.4));
+      ctx.clip();
+      M.lines.forEach((line, li) => {
+        const cy = M.startY + li * M.lineH;
+        for (const w of line.words) paintText(ctx, w.text, M.cx + w.x, cy, { alpha: appear, fade: M.exitFade, color: M.accent, sw: M.sw, stroke: M.stroke });
+      });
+      ctx.restore();
+    }
+  };
+
+  function renderCaption(ctx, M) {
+    const fn = CAP_RENDER[M.motion] || CAP_RENDER['outline-basic'];
+    try { fn(ctx, M); } catch (e) { try { CAP_RENDER['outline-basic'](ctx, M); } catch (e2) {} }
+  }
+
+  /* ---------------- 스마트 자막 위치: 얼굴 회피 + 여백(복잡도) 분석 ---------------- */
+  const SMART = {
+    supported: (typeof window !== 'undefined' && typeof window.FaceDetector === 'function'),
+    det: null, faces: [], facesAt: 0, busy: false, failed: false,
+    key: '', yFrac: 0.78, at: 0, last: null
+  };
+
+  // 순수 함수: 밝기 배열에서 띠별 복잡도(에지·분산)와 얼굴 겹침을 점수화한다.
+  //   낮은 점수 = 한산한 자리. 테스트에서 합성 데이터로 직접 검증한다.
+  function analyzeBands(lum, w, h, o) {
+    o = o || {};
+    const yMin = o.yMin == null ? 0.22 : o.yMin;
+    const yMax = o.yMax == null ? 0.985 : o.yMax;
+    const capH = o.capH == null ? h * 0.1 : o.capH;
+    const base = o.base == null ? 0.78 : o.base;
+    const faces = o.faces || [];
+    const n = o.count || 7;
+    // 단위 주의: yMin/yMax/base는 화면 대비 비율(0~1), capH는 표본 픽셀 단위다.
+    const capHpx = Math.max(2, capH);
+    const x0 = Math.round(w * 0.05), x1 = Math.max(x0 + 2, Math.round(w * 0.95));
+    const lo = Math.max(0, yMin * h + capHpx / 2), hi = Math.max(lo, yMax * h - capHpx / 2);
+    const span = Math.max(0.0001, hi - lo);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const f = n === 1 ? 0.5 : i / (n - 1);
+      const yc = lo + span * f;
+      const ya = clamp(yc - capHpx / 2, 0, h), yb = clamp(yc + capHpx / 2, 0, h);
+      const r0 = Math.max(0, Math.floor(ya)), r1 = Math.min(h, Math.ceil(yb));
+      let sum = 0, sum2 = 0, grad = 0, cnt = 0;
+      for (let y = r0; y < r1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const v = lum[y * w + x];
+          sum += v; sum2 += v * v; cnt++;
+          if (x + 1 < x1) grad += Math.abs(lum[y * w + x + 1] - v);
+          if (y + 1 < r1) grad += Math.abs(lum[(y + 1) * w + x] - v);
+        }
+      }
+      if (!cnt) continue;
+      const mean = sum / cnt;
+      const sd = Math.sqrt(Math.max(0, sum2 / cnt - mean * mean));
+      const g = grad / cnt;
+      let score = (g / 42) * 0.62 + (sd / 62) * 0.38;
+      if (mean > 196) score += (mean - 196) / 40;          // 아주 밝은 곳(흰 배경)은 피한다
+      const rx0 = x0 / w, rx1 = x1 / w, ry0 = ya / h, ry1 = yb / h;
+      let ov = 0;
+      for (const fc of faces) {
+        const ix = Math.max(0, Math.min(rx1, fc.x + fc.w) - Math.max(rx0, fc.x));
+        const iy = Math.max(0, Math.min(ry1, fc.y + fc.h) - Math.max(ry0, fc.y));
+        ov += ix * iy;
+      }
+      ov = Math.min(1, ov / Math.max(0.0001, (rx1 - rx0) * (ry1 - ry0)));
+      if (ov > 0.02) score += 3 + ov * 6;                  // 얼굴 위는 사실상 배제
+      score += Math.abs(yc / h - base) * 0.12;             // 사용자가 정한 위치에서 크게 벗어나지 않게
+      out.push({ yc, yFrac: yc / h, score, grad: g, sd, mean, faceOverlap: ov, ok: !(ov > 0.02) });
+    }
+    const ranked = out.slice().sort((a, b) => a.score - b.score);
+    return { best: ranked[0] || null, bands: out, ranked };
+  }
+
+  const SAMPLE = { cv: null, g: null, w: 96, h: 171 };
+  function sampleScene(srcCtx) {
+    if (!SAMPLE.cv) {
+      SAMPLE.cv = document.createElement('canvas');
+      SAMPLE.g = SAMPLE.cv.getContext('2d', { willReadFrequently: true });
+    }
+    SAMPLE.cv.width = SAMPLE.w; SAMPLE.cv.height = SAMPLE.h;
+    const g = SAMPLE.g;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, SAMPLE.w, SAMPLE.h);
+    try { g.drawImage(srcCtx.canvas, 0, 0, SAMPLE.w, SAMPLE.h); } catch (e) { return null; }
+    let img;
+    try { img = g.getImageData(0, 0, SAMPLE.w, SAMPLE.h); } catch (e) { return null; }
+    const d = img.data, n = SAMPLE.w * SAMPLE.h, lum = new Float32Array(n);
+    for (let i = 0, p = 0; p < n; i += 4, p++) lum[p] = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    return { lum, w: SAMPLE.w, h: SAMPLE.h, canvas: SAMPLE.cv };
+  }
+
+  function kickFaceDetect(sample) {
+    if (!SMART.supported || SMART.busy || !sample) return;
+    if (performance.now() - SMART.facesAt < 420) return;
+    SMART.facesAt = performance.now();
+    SMART.busy = true;
+    try {
+      if (!SMART.det) SMART.det = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 4 });
+      const res = SMART.det.detect(sample.canvas);
+      Promise.resolve(res).then(list => {
+        SMART.faces = (list || []).map(f => {
+          const b = (f && f.boundingBox) || {};
+          return { x: (b.x || 0) / sample.w, y: (b.y || 0) / sample.h, w: (b.width || 0) / sample.w, h: (b.height || 0) / sample.h };
+        }).filter(b => b.w > 0.01 && b.h > 0.01);
+        SMART.busy = false;
+      }).catch(() => { SMART.faces = []; SMART.failed = true; SMART.busy = false; });
+    } catch (e) { SMART.faces = []; SMART.failed = true; SMART.busy = false; }
+  }
+
+  // 화면을 실제로 재서 자막을 놓을 띠를 고른다. 문장이 바뀌면 즉시, 같은 문장에서는 120ms마다 갱신.
+  function smartCaptionY(ctx, W, H, capH, st, key) {
+    const adReserve = st.ad === 'coupang' ? H * 0.757 : H * 0.985;
+    const base = clamp(st.capY, 50, 95) / 100;
+    // 안전영역: 상단 제목 2줄 아래(0.26) ~ 하단 UI·광고 문구 위(0.92 / 쿠팡이면 0.757)
+    const yMin = 0.26, yMax = Math.max(yMin, Math.min(0.92, adReserve / H));
+    const now = performance.now();
+    if (SMART.key === String(key) && now - SMART.at < 120 && SMART.last) return SMART.last;
+    const sample = sampleScene(ctx);
+    if (!sample) return { yFrac: base, mode: 'off', best: null };
+    kickFaceDetect(sample);
+    const res = analyzeBands(sample.lum, sample.w, sample.h, {
+      capH: (capH / H) * sample.h, yMin, yMax, base, faces: SMART.faces, count: 7
+    });
+    const best = res.best;
+    const out = {
+      yFrac: best ? best.yFrac : base,
+      score: best ? best.score : 0,
+      faceOverlap: best ? best.faceOverlap : 0,
+      mode: SMART.supported ? (SMART.faces.length ? 'face' : 'face-ok') : 'band',
+      faces: SMART.faces.length,
+      bands: res.ranked ? res.ranked.slice(0, 3).map(b => ({ yFrac: +b.yFrac.toFixed(3), score: +b.score.toFixed(3) })) : []
+    };
+    SMART.last = out; SMART.key = String(key); SMART.at = now; SMART.yFrac = out.yFrac;
+    return out;
+  }
+
+  /* --- 자막 블록: 레이아웃 → 자리(스마트/수동) → 모션 --- */
+  function drawCaption(ctx, W, H, st, text, hlWords, lt, dur, key) {
+    const hl = st.highlightOn ? (hlWords || []) : [];
+    const model = captionModel(ctx, W, H, text, st, hl);
+    const motion = MOTION_BY_ID[st.capMotion] ? st.capMotion : 'outline-basic';
+    const maxScale = CAP_MAX_SCALE[motion] || 1;
+    const capH = (model.lines.length - 1) * model.lineH + model.fs * Math.max(1, maxScale);
+    const adReserve = st.ad === 'coupang' ? H * 0.757 : H * 0.985;
+
+    let placed = null, yCenter;
+    if (st.smartPlace) {
+      placed = smartCaptionY(ctx, W, H, capH, st, key);
+      const loY = H * 0.26 + capH / 2;
+      const hiY = Math.max(loY, Math.min(adReserve, H * 0.92) - capH / 2);
+      yCenter = clamp(placed.yFrac * H, loY, hiY);
+    } else {
+      yCenter = clamp(st.capY, 50, 95) / 100 * H;
+    }
+    let startY = yCenter - (model.lines.length - 1) * model.lineH / 2;
+    // 광고·대가성 문구와 겹치지 않게 위로 올린다
+    const bottom = startY + (model.lines.length - 1) * model.lineH + model.fs / 2 * Math.max(1, maxScale);
+    if (bottom > adReserve) startY -= (bottom - adReserve);
+    startY = Math.max(H * 0.22, startY);
+
+    const longest = model.lines.reduce((a, l) => {
+      for (const w of l.words) if (!a || w.text.length > a.length) a = w.text;
+      return a;
+    }, '');
+    const hlAny = model.lines.some(l => l.words.some(w => w.hl));
+    const hasNum = /\d/.test(text || '');
+    const M = {
+      cx: W / 2, W, H, fs: model.fs, lineH: model.lineH, startY,
+      space: model.space, lines: model.lines, width: model.width,
+      sw: Math.max(2, Math.round(H * 0.006)),
+      base: st.capColor, stroke: st.capStroke, accent: '#ffd166',
+      font: model.font, motion, text: text || '',
+      lt: Math.max(0, lt), dur: Math.max(0.5, dur), exitFade: 1,
+      emoji: pickEmoji(text), hasNum, hlAny, hlFallback: longest, placed
+    };
+    ctx.font = model.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const exitP = clamp((M.lt - (M.dur - 0.16)) / 0.16, 0, 1);
+    M.exitFade = motion === 'zoom-swap' ? 1 : 1 - exitP;
+    renderCaption(ctx, M);
+    return { model, M, placed, adReserve, yCenter, startY, maxScale,
+      bottom: startY + (model.lines.length - 1) * model.lineH + model.fs / 2 * Math.max(1, maxScale) };
+  }
+
+  let LAST_CAP = null;
+
   function drawFrame(ctx, W, H, t) {
     const st = state.style;
     const script = state.script;
@@ -2076,32 +2678,15 @@
       ctx.font = '800 ' + s2 + 'px ' + fam;
       ctx.strokeText(t2, W / 2, y2); ctx.fillStyle = '#ffd166'; ctx.fillText(t2, W / 2, y2);
     }
-    // 자막(현재 문장)
+    // 자막(현재 문장) — 모션 15종 · 스마트 위치
     if (script && script.sentences[idx]) {
       const text = script.sentences[idx].text;
-      let fs = Math.round(st.capSize * (W / 540));
-      const maxW = W * 0.9;
-      let wrap = null, font = '';
-      // 자막은 최대 4줄: 넘치면 글자를 줄여 영상 밖으로 나가지 않게 한다
-      for (let guard = 0; guard < 14; guard++) {
-        font = '800 ' + fs + 'px ' + FONT_STACK[st.capFont];
-        wrap = wrapRich(ctx, text, maxW, font);
-        if (wrap.lines.length <= 4 || fs <= 18) break;
-        fs -= 2;
-      }
-      let lineH = fs * 1.28;
-      let cy = clamp(st.capY, 50, 95) / 100 * H;
-      let startY = cy - (wrap.lines.length - 1) * lineH / 2;
-      // 광고·대가성 문구와 겹치지 않게 위로 올린다
-      const adReserve = st.ad === 'coupang' ? H * 0.757 : st.ad === 'ad' ? H * 0.985 : H * 0.985;
-      const bottom = startY + (wrap.lines.length - 1) * lineH + fs / 2;
-      if (bottom > adReserve) startY -= (bottom - adReserve);
-      startY = Math.max(H * 0.22, startY);
-      ctx.font = font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      const hl = st.highlightOn ? (script.highlights || []).map(normWord).filter(Boolean) : [];
-      wrap.lines.forEach((line, i) => {
-        drawRichLine(ctx, line, wrap.space, W / 2, startY + i * lineH, hl, st.capColor, '#ffd166', st.capStroke);
-      });
+      const hlWords = (script.highlights || []).map(normWord).filter(Boolean);
+      const rowStart = row ? row.start : 0;
+      const dur = row ? Math.max(0.5, row.end - row.start) : 2;
+      LAST_CAP = drawCaption(ctx, W, H, st, text, hlWords, t - rowStart, dur, idx);
+    } else {
+      LAST_CAP = null;
     }
     // 광고 / 대가성 문구 — 유튜브 쇼츠 상·하단 UI 세이프존을 피한다.(PC 패키지와 같은 자리)
     if (st.ad !== 'off') {
@@ -2272,6 +2857,42 @@
 
   /* ---------------- style / preset ---------------- */
   const DEFAULT_STYLE = JSON.parse(JSON.stringify(state.style));
+
+  function renderCapMotionChips() {
+    const box = $('#capMotionChips'); if (!box) return;
+    const cur = (state.style && state.style.capMotion) || 'outline-basic';
+    box.innerHTML = CAP_MOTIONS.map(m =>
+      '<button type="button" class="motion-chip' + (m.id === cur ? ' on' : '') + '" data-motion="' + m.id + '" title="' + esc(m.note) + '">' +
+      '<span class="fam">' + esc(m.family) + '</span>' + esc(m.label) + '</button>').join('');
+  }
+  function setCapMotion(id) {
+    const m = MOTION_BY_ID[id] || CAP_MOTIONS[0];
+    state.style.capMotion = m.id;
+    renderCapMotionChips();
+    const now = $('#capMotionNow'); if (now) now.textContent = m.label;
+    const hint = $('#capMotionHint'); if (hint) hint.textContent = m.note;
+    drawPreview();
+    if ($('#presetRemember') && $('#presetRemember').checked) savePreset(true);
+  }
+  function updateSmartNote() {
+    const badge = $('#smartPlaceBadge'), note = $('#smartPlaceNote');
+    const sup = SMART.supported;
+    if (badge) { badge.textContent = sup ? '얼굴+여백' : '여백 분석'; badge.className = 'badge ' + (sup ? 'live' : 'blue'); }
+    if (note) {
+      note.innerHTML = state.style.smartPlace
+        ? (sup
+          ? '켜짐 · <span class="ok">이 브라우저는 얼굴 인식(FaceDetector)을 지원합니다.</span> 얼굴을 피해 가장 한산한 띠에 자막을 놓습니다. 위 「자막 위치」는 기준값으로만 쓰입니다.'
+          : '켜짐 · <span class="warn">이 브라우저는 얼굴 인식이 없어 여백·복잡도 분석만으로 배치합니다</span>(Safari·Firefox 포함). 위 「자막 위치」는 기준값으로만 쓰입니다.')
+        : '켜면 장면에서 <b>가장 한산한 띠</b>를 찾아 자막을 자동으로 옮깁니다. ' + (sup ? '<span class="ok">이 브라우저는 얼굴 인식도 지원합니다.</span>' : '<span class="warn">이 브라우저는 얼굴 인식 미지원 → 여백 분석으로 동작합니다.</span>');
+    }
+  }
+  function setSmartPlace(on) {
+    state.style.smartPlace = !!on;
+    const cb = $('#smartPlace'); if (cb) cb.checked = !!on;
+    SMART.key = ''; SMART.last = null; SMART.yFrac = clamp(state.style.capY, 50, 95) / 100;
+    updateSmartNote(); updateStyleLabels(); drawPreview();
+    if ($('#presetRemember') && $('#presetRemember').checked) savePreset(true);
+  }
   function styleFromInputs() {
     const st = state.style;
     st.blurOn = $('#blurOn').checked; st.blurY = Number($('#blurY').value); st.blurH = Number($('#blurH').value); st.blurStrength = Number($('#blurStrength').value);
@@ -2279,6 +2900,7 @@
     st.titleOn = $('#titleOn').checked; st.highlightOn = $('#highlightOn').checked;
     st.capSize = Number($('#capSize').value); st.capY = Number($('#capY').value); st.capFont = $('#capFont').value;
     st.capColor = $('#capColor').value; st.capStroke = $('#capStroke').value;
+    st.capMotion = (MOTION_BY_ID[st.capMotion] ? st.capMotion : 'outline-basic');
     st.bgm = $('#bgmSel').value; st.bgmVol = Number($('#bgmVol').value);
     updateStyleLabels(); drawPreview(); updatePreviewMeta();
     if ($('#presetRemember').checked) savePreset(true);
@@ -2290,11 +2912,16 @@
     set('#capSize', st.capSize); set('#capY', st.capY); set('#capFont', st.capFont); set('#capColor', st.capColor); set('#capStroke', st.capStroke);
     set('#bgmSel', st.bgm); set('#bgmVol', st.bgmVol);
     setAdSeg(st.ad);
-    updateStyleLabels();
+    renderCapMotionChips();
+    const mn = $('#capMotionNow'); if (mn) mn.textContent = (MOTION_BY_ID[st.capMotion] || CAP_MOTIONS[0]).label;
+    const mh = $('#capMotionHint'); if (mh) mh.textContent = (MOTION_BY_ID[st.capMotion] || CAP_MOTIONS[0]).note;
+    const sp = $('#smartPlace'); if (sp) sp.checked = !!st.smartPlace;
+    updateSmartNote(); updateStyleLabels();
   }
   function updateStyleLabels() {
     const st = state.style;
-    const map = { '#blurYVal': st.blurY + '%', '#blurHVal': st.blurH + '%', '#blurStrengthVal': (st.blurMode === 'mosaic' ? '모자이크 ' : '블러 ') + st.blurStrength + 'px', '#capSizeVal': String(st.capSize), '#capYVal': st.capY + '%', '#bgmVolVal': st.bgmVol + '%' };
+    const capYLabel = st.smartPlace ? ('자동 ' + Math.round(((SMART.last && SMART.last.yFrac) || (clamp(st.capY, 50, 95) / 100)) * 100) + '%') : st.capY + '%';
+    const map = { '#blurYVal': st.blurY + '%', '#blurHVal': st.blurH + '%', '#blurStrengthVal': (st.blurMode === 'mosaic' ? '모자이크 ' : '블러 ') + st.blurStrength + 'px', '#capSizeVal': String(st.capSize), '#capYVal': capYLabel, '#bgmVolVal': st.bgmVol + '%' };
     Object.keys(map).forEach(k => { const el = $(k); if (el) el.textContent = map[k]; });
     const ad = $('#adPreview');
     if (ad) ad.innerHTML = st.ad === 'off' ? '광고 표시를 끕니다.' : st.ad === 'coupang' ? '하단에 <b>광고 · 쿠팡 파트너스 …수수료를 제공받습니다</b> 문구가 들어갑니다.' : '상단에 <b>(광고)</b> 배지가 표시됩니다.';
@@ -4739,6 +5366,8 @@
       el.addEventListener('change', styleFromInputs);
     });
     $('#segAd').addEventListener('click', e => { const b = e.target.closest('button[data-v]'); if (b) setAdSeg(b.dataset.v); });
+    $('#capMotionChips').addEventListener('click', e => { const b = e.target.closest('[data-motion]'); if (b) setCapMotion(b.dataset.motion); });
+    $('#smartPlace').addEventListener('change', () => setSmartPlace($('#smartPlace').checked));
     $('#btnSavePreset').addEventListener('click', () => savePreset(false));
     $('#btnResetStyle').addEventListener('click', resetStyle);
     $('#presetRemember').addEventListener('change', () => {
@@ -5057,6 +5686,15 @@
     trendParseFromInput, trendLoadSample, runBenchmark, renderBench, benchTextOf, benchAllText, benchMarkdown, benchSend,
     TREND_SAMPLE_TEXT,
     setTime: t => { PV.t = clamp(t, 0, totalDuration()); drawPreview(); },
+    // 자막 모션 15종 · 스마트 자막 위치
+    CAP_MOTIONS, MOTION_BY_ID, setCapMotion, renderCapMotionChips, setSmartPlace, updateSmartNote,
+    drawCaption, captionModel, captionLayout, analyzeBands, smartCaptionY, sampleScene, SMART,
+    lastCaption: () => LAST_CAP ? {
+      yCenter: LAST_CAP.yCenter, startY: LAST_CAP.startY, adReserve: LAST_CAP.adReserve,
+      bottom: LAST_CAP.bottom, maxScale: LAST_CAP.maxScale, lineH: LAST_CAP.model.lineH,
+      lines: LAST_CAP.model.lines.length, fs: LAST_CAP.model.fs, motion: LAST_CAP.M.motion,
+      placed: LAST_CAP.placed, lt: LAST_CAP.M.lt, exitFade: LAST_CAP.M.exitFade
+    } : null,
     setFamousTime: t => { FAMOUS.t = clamp(t, 0, famousDur()); drawFamousPreview(); },
     famousNow: () => FAMOUS.t,
     now: () => PV.t
